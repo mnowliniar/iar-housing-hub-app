@@ -16,22 +16,6 @@ final class MonthlyVM: ObservableObject {
     @Published var isLoading = false
     @AppStorage("selectedGeo") var geoID: Int = 18 // e.g. Indiana
 
-    private func fetchCSVData(_ url: URL) async throws -> Data {
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
-        req.setValue("text/csv, text/plain, */*", forHTTPHeaderField: "Accept")
-
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.waitsForConnectivity = false
-        let session = URLSession(configuration: cfg)
-
-        let (data, _) = try await session.data(for: req)
-        if data.count > 0 { return data }
-
-        // Fallback for 0-byte bodies from some CDNs on watchOS
-        let (tmpURL, _) = try await session.download(for: req)
-        return try Data(contentsOf: tmpURL)
-    }
-
     func load() async {
         guard !isLoading else { return }
         isLoading = true
@@ -75,39 +59,58 @@ final class MonthlyVM: ObservableObject {
             let titlesNeedingSeries = ["Closed Sales", "New Listings", "Weekly Sale Price"]
             for title in titlesNeedingSeries {
                 guard let viz = summary.vizzes.first(where: { $0.title == title }),
-                      let url = viz.csvURL else { continue }
-                do {
-                    let csvData = try await fetchCSVData(url)
-                    guard let s = String(data: csvData, encoding: .utf8)
-                       ?? String(data: csvData, encoding: .isoLatin1) else { continue }
+                      let rows = viz.chart_data,
+                      !rows.isEmpty else { continue }
 
-                    // Split on CRLF or LF
-                    let lines = s.contains("\r\n") ? s.split(separator: "\r\n") : s.split(separator: "\n")
-                    guard let headerLine = lines.first, lines.count > 1 else { continue }
-                    let header = headerLine.split(separator: ",").map(String.init)
-
-                    // Prefer weekly columns; fall back to generic; else index 1
-                    let preferred = [
-                        "Estimated weekly value",
-                        "Actual value",
-                        "Value",
-                        "y"
-                    ]
-                    let valueIdx: Int = (
-                        header.firstIndex(where: { preferred.contains($0) })
-                        ?? (header.count > 1 ? 1 : 0)
-                    )
-
-                    let rows = lines.dropFirst()
-                    let nums: [Double] = rows.compactMap { line in
-                        let cols = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
-                        guard cols.indices.contains(valueIdx) else { return nil }
-                        return Double(cols[valueIdx].replacingOccurrences(of: ",", with: ""))
+                func parseNumber(_ raw: Any?) -> Double? {
+                    switch raw {
+                    case let d as Double:
+                        return d
+                    case let i as Int:
+                        return Double(i)
+                    case let s as String:
+                        let cleaned = s.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        return Double(cleaned)
+                    default:
+                        return nil
                     }
-                    pointsByLabel[title] = Array(nums.suffix(12))
-                } catch {
-                    // Ignore failures for this series
                 }
+
+                func firstMatchingKey(in rows: [[String: JSONValue]], candidates: [String]) -> String? {
+                    candidates.first(where: { candidate in rows.contains(where: { $0[candidate] != nil }) })
+                }
+
+                func fallbackNumericKey(in rows: [[String: JSONValue]]) -> String? {
+                    guard let firstRow = rows.first else { return nil }
+                    let excludedKeys: Set<String> = [
+                        "Reporting date", "reporting_date", "Date", "date",
+                        "x", "label", "Label", "category", "Category"
+                    ]
+                    return firstRow.keys.first(where: { key in
+                        !excludedKeys.contains(key) && rows.contains(where: { parseNumber($0[key]?.value) != nil })
+                    })
+                }
+
+                let valueKey: String? = {
+                    switch viz.type {
+                    case "lineWeek", "barWeek":
+                        return firstMatchingKey(in: rows, candidates: ["Estimated weekly value", "Actual value", "Value", "y1", "y"])
+                            ?? fallbackNumericKey(in: rows)
+                    case "yoyExp", "line3mo", "line12mo", "line", "lineYr":
+                        return firstMatchingKey(in: rows, candidates: ["Value"])
+                            ?? fallbackNumericKey(in: rows)
+                    default:
+                        return firstMatchingKey(in: rows, candidates: ["Value", "y", "y1"])
+                            ?? fallbackNumericKey(in: rows)
+                    }
+                }()
+
+                guard let resolvedValueKey = valueKey else { continue }
+
+                let nums: [Double] = rows.compactMap { row in
+                    parseNumber(row[resolvedValueKey]?.value)
+                }
+                pointsByLabel[title] = Array(nums.suffix(12))
             }
         }
     }

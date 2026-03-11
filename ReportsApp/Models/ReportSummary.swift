@@ -8,6 +8,35 @@
 
 import Foundation
 
+struct JSONValue: Decodable {
+    let value: Any
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if container.decodeNil() {
+            value = NSNull()
+        } else if let boolValue = try? container.decode(Bool.self) {
+            value = boolValue
+        } else if let intValue = try? container.decode(Int.self) {
+            value = intValue
+        } else if let doubleValue = try? container.decode(Double.self) {
+            value = doubleValue
+        } else if let stringValue = try? container.decode(String.self) {
+            value = stringValue
+        } else if let arrayValue = try? container.decode([JSONValue].self) {
+            value = arrayValue.map(\.value)
+        } else if let dictValue = try? container.decode([String: JSONValue].self) {
+            value = dictValue.mapValues(\.value)
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported JSON value"
+            )
+        }
+    }
+}
+
 struct ReportSummary: Decodable {
     let title: String
     let geo: String
@@ -33,23 +62,8 @@ struct VizSummary: Identifiable, Decodable {
     
     let geo_id: Int?
     let proptype: String?
-    let img_url: String?
     let update_date: String?
     let type: String?
     let format: String?
-
-    var csvURL: URL? {
-        guard
-            let geo = geo_id,
-            let url = img_url,
-            let updateDate = update_date,
-            let prop = proptype
-        else {
-            return nil
-        }
-
-        let base = "https://data.indianarealtors.com/files/output"
-        let fullPath = "\(base)/\(updateDate)/\(geo)/\(prop)/\(url)_chart.csv"
-        return URL(string: fullPath)
-    }
+    let chart_data: [[String: JSONValue]]?
 }

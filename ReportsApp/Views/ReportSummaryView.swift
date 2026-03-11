@@ -8,6 +8,8 @@
 
 import SwiftUI
 import Charts
+import WebKit
+import UIKit
 
 struct ReportSummaryView: View {
     let report: Report
@@ -16,6 +18,7 @@ struct ReportSummaryView: View {
 
     @State private var summary: ReportSummary?
     @State private var isLoading = true
+    @State private var exportItem: ExportURLItem?
     @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
@@ -24,12 +27,27 @@ struct ReportSummaryView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     // Title area
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(summary.title)
-                            .font(.title2).bold()
-                        Text(summary.geo)
-                            .font(.subheadline).foregroundColor(.secondary)
-                        Text(summary.report_date)
-                            .font(.subheadline).foregroundColor(.secondary)
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(summary.title)
+                                    .font(.title2).bold()
+                                Text(summary.geo)
+                                    .font(.subheadline).foregroundColor(.secondary)
+                                Text(summary.report_date)
+                                    .font(.subheadline).foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                guard let url = makeWebReportURL() else { return }
+                                print("Export URL:", url.absoluteString)
+                                exportItem = ExportURLItem(url: url)
+                            } label: {
+                                Label("Export", systemImage: "printer")
+                                    .labelStyle(.iconOnly)
+                                    .font(.title3)
+                            }
+                            .accessibilityLabel("Export report")
+                        }
                     }
                     .padding(.horizontal)
 
@@ -46,9 +64,9 @@ struct ReportSummaryView: View {
                                        HeroFactRow(label: label2, value: val2, expected: viz.exp2)
                                    }
                                    // CHART
-                                   if let url = viz.csvURL, let type = viz.type {
+                                   if let chartData = viz.chart_data, let type = viz.type {
                                        DataChartView(
-                                           csvURL: url,
+                                           chartData: chartData,
                                            type: type,
                                            color: .blue,
                                            title: viz.title,
@@ -97,6 +115,9 @@ struct ReportSummaryView: View {
             print("Loading summary for \(geo.geoid), \(updateDate)")
             await loadSummary()
         }
+        .sheet(item: $exportItem) { item in
+            WebReportPrintView(url: item.url)
+        }
     }
 
     func loadSummary() async {
@@ -108,6 +129,21 @@ struct ReportSummaryView: View {
             geoID: geo.geoid
         )
         isLoading = false
+    }
+
+    func makeWebReportURL() -> URL? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: updateDate) else { return nil }
+
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+
+        let baseURLString = "https://data.indianarealtors.com"
+        let path = "/reports/viewreport/onepager/\(report.id)/\(geo.geoid)/\(year)/\(month)/\(day)/"
+        return URL(string: baseURLString + path)
     }
 }
 
@@ -199,24 +235,13 @@ struct FactRow: View {
 }
 
 struct DataChartView: View {
-    let csvURL: URL
+    let chartData: [[String: JSONValue]]
     let type: String
     let color: Color
     let title: String
     let format: String
 
-    struct Series: Identifiable {
-        let id = UUID()
-        let name: String
-        var values: [Double]
-    }
-
-    struct DataPackage {
-        var labels: [String] = []
-        var dates: [Date]? = nil
-        var series: [Series] = []
-        var format: String = "default"
-    }
+    // Series and DataPackage structs removed
 
     @State private var dataPackage = DataPackage()
     @State private var isLoading = true
@@ -261,7 +286,7 @@ struct DataChartView: View {
         let domain = dataPackage.series.compactMap { s in
             seen.insert(s.name).inserted ? s.name : nil
         }
-        let range = domain.map { allColors[$0] ?? .accentColor }
+        let range = domain.map { allColors[$0] ?? BrandColors.teal }
         return (domain, range)
     }
     
@@ -319,130 +344,247 @@ struct DataChartView: View {
         let type: String
         let colors: [String: Color]
 
-
         var body: some View {
             Chart {
-                ForEach(Array(series.enumerated()), id: \.offset) { _, s in
-                    let end: Int = {
-                        if let ds = dates, !ds.isEmpty {
-                            return Swift.min(labels.count, s.values.count, ds.count)
-                        } else {
-                            return Swift.min(labels.count, s.values.count)
-                        }
-                    }()
-                    switch type {
-                    case "barCat", "barGrouped":
-                        // Categorical bars: ignore dates, use labels as x
-                        let endBar = Swift.min(labels.count, s.values.count)
-                        let barData: [(idx: Int, label: String, value: Double)] = (0..<endBar).compactMap { i in
-                            let y = s.values[i]
-                            guard i < labels.count, y.isFinite else { return nil }
-                            return (i, labels[i], y)
-                        }
-                        ForEach(barData, id: \.idx) { point in
-                            BarMark(
-                                x: .value("Category", point.label),
-                                y: .value(s.name, point.value)
-                            )
-                            .foregroundStyle(by: .value("Series", s.name))
-                        }
+                switch type {
+                case "yoyExp":
+                    let currentSeries = series.first(where: { $0.name == "Current" })
+                    let previousSeries = series.first(where: { $0.name == "Previous Year" })
+                    let lowSeries = series.first(where: { $0.name == "Expected Low" })
+                    let highSeries = series.first(where: { $0.name == "Expected High" })
 
-                    case "dotPlot":
-                        ForEach(0..<end, id: \.self) { i in
-                            if let ds = dates, i < ds.count {
-                                PointMark(
-                                    x: .value("Date", ds[i]),
-                                    y: .value(s.name, s.values[i])
-                                )
-                                .symbol(.circle)
-                                .foregroundStyle(by: .value("Series", s.name))
+                    if let lowSeries, let highSeries {
+                        let endBand: Int = {
+                            if let ds = dates, !ds.isEmpty {
+                                return Swift.min(labels.count, lowSeries.values.count, highSeries.values.count, ds.count)
                             } else {
-                                PointMark(
-                                    x: .value("Label", labels[i]),
-                                    y: .value(s.name, s.values[i])
-                                )
-                                .symbol(.circle)
-                                .foregroundStyle(by: .value("Series", s.name))
+                                return Swift.min(labels.count, lowSeries.values.count, highSeries.values.count)
+                            }
+                        }()
+
+                        ForEach(0..<endBand, id: \.self) { i in
+                            let low = lowSeries.values[i]
+                            let high = highSeries.values[i]
+                            if low.isFinite && high.isFinite {
+                                if let ds = dates, i < ds.count {
+                                    AreaMark(
+                                        x: .value("Date", ds[i]),
+                                        yStart: .value("Expected Low", low),
+                                        yEnd: .value("Expected High", high)
+                                    )
+                                    .foregroundStyle(BrandColors.teal.opacity(0.2))
+                                } else {
+                                    AreaMark(
+                                        x: .value("Label", labels[i]),
+                                        yStart: .value("Expected Low", low),
+                                        yEnd: .value("Expected High", high)
+                                    )
+                                    .foregroundStyle(BrandColors.teal.opacity(0.2))
+                                }
+                            }
+                        }
+                    }
+
+                    ForEach([currentSeries, previousSeries].compactMap { $0 }, id: \.name) { lineSeries in
+                        let endLine: Int = {
+                            if let ds = dates, !ds.isEmpty {
+                                return Swift.min(labels.count, lineSeries.values.count, ds.count)
+                            } else {
+                                return Swift.min(labels.count, lineSeries.values.count)
+                            }
+                        }()
+
+                        ForEach(0..<endLine, id: \.self) { i in
+                            let y = lineSeries.values[i]
+                            if y.isFinite {
+                                if let ds = dates, i < ds.count {
+                                    LineMark(
+                                        x: .value("Date", ds[i]),
+                                        y: .value(lineSeries.name, y)
+                                    )
+                                    .lineStyle(StrokeStyle(
+                                        lineWidth: 4,
+                                        lineCap: .round,
+                                        lineJoin: .round,
+                                        miterLimit: 2
+                                    ))
+                                    .foregroundStyle(by: .value("Series", lineSeries.name))
+                                } else {
+                                    LineMark(
+                                        x: .value("Label", labels[i]),
+                                        y: .value(lineSeries.name, y)
+                                    )
+                                    .lineStyle(StrokeStyle(
+                                        lineWidth: 4,
+                                        lineCap: .round,
+                                        lineJoin: .round,
+                                        miterLimit: 2
+                                    ))
+                                    .foregroundStyle(by: .value("Series", lineSeries.name))
+                                }
                             }
                         }
 
-                    default:
-                        // Lines: use dates when available, else categorical labels
-                        ForEach(0..<end, id: \.self) { i in
-                            if let ds = dates, i < ds.count {
-                                LineMark(
-                                    x: .value("Date", ds[i]),
-                                    y: .value(s.name, s.values[i])
-                                )
-                                .lineStyle(StrokeStyle(
-                                    lineWidth: (type == "lineTrend" && s.name == "Weekly") ? 1 : 4,
-                                    lineCap: .round,
-                                    lineJoin: .round,
-                                    miterLimit: 2
-                                ))
-                                .foregroundStyle(by: .value("Series", s.name))
-                            } else {
-                                LineMark(
-                                    x: .value("Label", labels[i]),
-                                    y: .value(s.name, s.values[i])
-                                )
-                                .lineStyle(StrokeStyle(
-                                    lineWidth: 4,
-                                    lineCap: .round,
-                                    lineJoin: .round,
-                                    miterLimit: 2
-                                ))
-                                .foregroundStyle(by: .value("Series", s.name))
-                            }
-                        }
-                        // Terminal dot for all series
-                        if let last = (0..<end).last(where: { i in
-                            i < s.values.count && s.values[i].isFinite
+                        if let last = (0..<endLine).last(where: { i in
+                            i < lineSeries.values.count && lineSeries.values[i].isFinite
                         }) {
                             if let ds = dates, last < ds.count {
                                 PointMark(
                                     x: .value("Date", ds[last]),
-                                    y: .value(s.name, s.values[last])
-                                )
-                                .symbol(.circle)
-                                .symbolSize(30) // adjust size to taste
-                                .foregroundStyle(by: .value("Series", s.name))
-                            } else {
-                                PointMark(
-                                    x: .value("Label", labels[last]),
-                                    y: .value(s.name, s.values[last])
+                                    y: .value(lineSeries.name, lineSeries.values[last])
                                 )
                                 .symbol(.circle)
                                 .symbolSize(30)
-                                .foregroundStyle(by: .value("Series", s.name))
+                                .foregroundStyle(by: .value("Series", lineSeries.name))
+                            } else {
+                                PointMark(
+                                    x: .value("Label", labels[last]),
+                                    y: .value(lineSeries.name, lineSeries.values[last])
+                                )
+                                .symbol(.circle)
+                                .symbolSize(30)
+                                .foregroundStyle(by: .value("Series", lineSeries.name))
                             }
                         }
-                        // End labels for trend overlays (match series color)
-                        if type == "lineTrend" && s.name == "Last 3 weeks" {
-                            // Find the last valid index within `end` for this series
+                    }
+
+                default:
+                    ForEach(Array(series.enumerated()), id: \.offset) { _, s in
+                        let end: Int = {
+                            if let ds = dates, !ds.isEmpty {
+                                return Swift.min(labels.count, s.values.count, ds.count)
+                            } else {
+                                return Swift.min(labels.count, s.values.count)
+                            }
+                        }()
+
+                        switch type {
+                        case "barCat":
+                            let endBar = Swift.min(labels.count, s.values.count)
+                            let barData: [(idx: Int, label: String, value: Double)] = (0..<endBar).compactMap { i in
+                                let y = s.values[i]
+                                guard i < labels.count, y.isFinite else { return nil }
+                                return (i, labels[i], y)
+                            }
+                            ForEach(barData, id: \.idx) { point in
+                                BarMark(
+                                    x: .value("Category", point.label),
+                                    y: .value(s.name, point.value)
+                                )
+                                .foregroundStyle(by: .value("Series", s.name))
+                            }
+
+                        case "barGrouped":
+                            let endBar = Swift.min(labels.count, s.values.count)
+                            let barData: [(idx: Int, label: String, value: Double)] = (0..<endBar).compactMap { i in
+                                let y = s.values[i]
+                                guard i < labels.count, y.isFinite else { return nil }
+                                return (i, labels[i], y)
+                            }
+                            ForEach(barData, id: \.idx) { point in
+                                BarMark(
+                                    x: .value("Category", point.label),
+                                    y: .value(s.name, point.value)
+                                )
+                                .position(by: .value("Series", s.name))
+                                .foregroundStyle(by: .value("Series", s.name))
+                            }
+
+                        case "dotPlot":
+                            ForEach(0..<end, id: \.self) { i in
+                                if let ds = dates, i < ds.count {
+                                    PointMark(
+                                        x: .value("Date", ds[i]),
+                                        y: .value(s.name, s.values[i])
+                                    )
+                                    .symbol(.circle)
+                                    .foregroundStyle(by: .value("Series", s.name))
+                                } else {
+                                    PointMark(
+                                        x: .value("Label", labels[i]),
+                                        y: .value(s.name, s.values[i])
+                                    )
+                                    .symbol(.circle)
+                                    .foregroundStyle(by: .value("Series", s.name))
+                                }
+                            }
+
+                        default:
+                            ForEach(0..<end, id: \.self) { i in
+                                if let ds = dates, i < ds.count {
+                                    LineMark(
+                                        x: .value("Date", ds[i]),
+                                        y: .value(s.name, s.values[i])
+                                    )
+                                    .lineStyle(StrokeStyle(
+                                        lineWidth: (type == "lineTrend" && s.name == "Weekly") ? 1 : 4,
+                                        lineCap: .round,
+                                        lineJoin: .round,
+                                        miterLimit: 2
+                                    ))
+                                    .foregroundStyle(by: .value("Series", s.name))
+                                } else {
+                                    LineMark(
+                                        x: .value("Label", labels[i]),
+                                        y: .value(s.name, s.values[i])
+                                    )
+                                    .lineStyle(StrokeStyle(
+                                        lineWidth: 4,
+                                        lineCap: .round,
+                                        lineJoin: .round,
+                                        miterLimit: 2
+                                    ))
+                                    .foregroundStyle(by: .value("Series", s.name))
+                                }
+                            }
+
                             if let last = (0..<end).last(where: { i in
                                 i < s.values.count && s.values[i].isFinite
                             }) {
                                 if let ds = dates, last < ds.count {
-                                    PointMark(x: .value("Date", ds[last]), y: .value(s.name, s.values[last]))
-                                        .symbol(.circle)
-                                        .foregroundStyle(by: .value("Series", s.name))
-                                        .opacity(0)
-                                        .annotation(position: .trailing, alignment: .trailing) {
-                                            Text(s.name)
-                                                .font(.caption2)
-                                                .foregroundColor(colors[s.name] ?? .secondary)
-                                        }
+                                    PointMark(
+                                        x: .value("Date", ds[last]),
+                                        y: .value(s.name, s.values[last])
+                                    )
+                                    .symbol(.circle)
+                                    .symbolSize(30)
+                                    .foregroundStyle(by: .value("Series", s.name))
                                 } else {
-                                    PointMark(x: .value("Label", labels[last]), y: .value(s.name, s.values[last]))
-                                        .symbol(.circle)
-                                        .foregroundStyle(by: .value("Series", s.name))
-                                        .opacity(0)
-                                        .annotation(position: .trailing, alignment: .trailing) {
-                                            Text(s.name)
-                                                .font(.caption2)
-                                                .foregroundColor(colors[s.name] ?? .secondary)
-                                        }
+                                    PointMark(
+                                        x: .value("Label", labels[last]),
+                                        y: .value(s.name, s.values[last])
+                                    )
+                                    .symbol(.circle)
+                                    .symbolSize(30)
+                                    .foregroundStyle(by: .value("Series", s.name))
+                                }
+                            }
+
+                            if type == "lineTrend" && s.name == "Last 3 weeks" {
+                                if let last = (0..<end).last(where: { i in
+                                    i < s.values.count && s.values[i].isFinite
+                                }) {
+                                    if let ds = dates, last < ds.count {
+                                        PointMark(x: .value("Date", ds[last]), y: .value(s.name, s.values[last]))
+                                            .symbol(.circle)
+                                            .foregroundStyle(by: .value("Series", s.name))
+                                            .opacity(0)
+                                            .annotation(position: .trailing, alignment: .trailing) {
+                                                Text(s.name)
+                                                    .font(.caption2)
+                                                    .foregroundColor(colors[s.name] ?? .secondary)
+                                            }
+                                    } else {
+                                        PointMark(x: .value("Label", labels[last]), y: .value(s.name, s.values[last]))
+                                            .symbol(.circle)
+                                            .foregroundStyle(by: .value("Series", s.name))
+                                            .opacity(0)
+                                            .annotation(position: .trailing, alignment: .trailing) {
+                                                Text(s.name)
+                                                    .font(.caption2)
+                                                    .foregroundColor(colors[s.name] ?? .secondary)
+                                            }
+                                    }
                                 }
                             }
                         }
@@ -459,7 +601,7 @@ struct DataChartView: View {
             return 0...1
         }
         // Bar chart types should start at zero for honest bar lengths
-        let isBar = (type == "barCat" || type == "barGrouped" || type == "barWeek")
+        let isBar = (type == "barGrouped" || type == "barWeek")
         let lo = isBar ? 0.0 : loRaw
         let hi = max(hiRaw, lo) // ensure non-negative span
         let span = max(hi - lo, 1e-9)
@@ -523,292 +665,98 @@ struct DataChartView: View {
             }
         }
         .task {
-            await loadCSV(from: csvURL)
-        }
-    }
-
-    func formatLabel(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: dateString) else { return dateString }
-
-        switch type {
-        case "line", "lineYoy", "yoyExp":
-            let fmt = DateFormatter()
-            fmt.dateFormat = "MMM yyyy"
-            return fmt.string(from: date)
-        case "lineDaily":
-            let fmt = DateFormatter()
-            fmt.dateFormat = "MMM d"
-            return fmt.string(from: date)
-        case "lineYr":
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyy"
-            return fmt.string(from: date)
-        case "barWeek", "lineWeek":
-            let fmt = DateFormatter()
-            fmt.dateFormat = "MMM d, yyyy"
-            return fmt.string(from: date)
-        default:
-            return dateString
-        }
-    }
-
-    func loadCSV(from url: URL) async {
-        do {
-            var req = URLRequest(url: url)
-            req.cachePolicy = .reloadIgnoringLocalCacheData
-            req.setValue("text/csv, */*;q=0.8", forHTTPHeaderField: "Accept")
-            req.setValue("ReportsApp/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
-
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            if let http = resp as? HTTPURLResponse {
-                print("HTTP status: \(http.statusCode), mime: \(http.mimeType ?? "?"), length: \(data.count)")
-            } else {
-                print("Non-HTTP response, length: \(data.count)")
-            }
-            guard !data.isEmpty else {
-                print("⚠️ Empty body from \(url.absoluteString)")
-                return
-            }
-
-            // Decode with UTF-8, fall back to ISO Latin-1 if needed
-            let csv: String
-            if let s = String(data: data, encoding: .utf8) {
-                csv = s
-            } else if let s = String(data: data, encoding: .isoLatin1) {
-                csv = s
-            } else {
-                print("⚠️ Failed to decode CSV as UTF-8/ISO-8859-1")
-                return
-            }
-            print(csv.prefix(500))
-            // Naive CSV split (sufficient for our defaults)
-            let lines = csv.components(separatedBy: .newlines)
-                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-
-            guard let headerLine = lines.first else { return }
-            let headers = headerLine.components(separatedBy: ",")
-            let rows = lines.dropFirst().map { $0.components(separatedBy: ",") }
-
-            func index(_ name: String) -> Int? { headers.firstIndex(of: name) }
-            func parseNumber(_ s: String) -> Double? {
-                let cleaned = s.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-                return Double(cleaned)
-            }
-
-            // Labels: prefer "Reporting date" (formatted), else "x"
-            let dateIdx = index("Reporting date")
-            let xIdx = index("x")
-            guard let labelIdx = xIdx ?? dateIdx else { return }
-
-            var labels: [String] = []
-            var dates: [Date]? = dateIdx != nil ? [] : nil
-            labels.reserveCapacity(rows.count)
-            for row in rows {
-                guard row.count > labelIdx else { continue }
-                let raw = row[labelIdx]
-                if dateIdx != nil {
-                    labels.append(formatLabel(raw))
-                    // parse ISO "yyyy-MM-dd" into Date
-                    let df = DateFormatter()
-                    df.dateFormat = "yyyy-MM-dd"
-                    if let d = df.date(from: raw) { dates?.append(d) }
-                } else {
-                    labels.append(raw)
-                }
-            }
-
-            // SERIES FACTORY + DETECTOR (systematic, supports infinite series)
-            func makeSeries(name: String, idx: Int) -> Series {
-                var vals: [Double] = []
-                vals.reserveCapacity(rows.count)
-                for row in rows {
-                    if row.indices.contains(idx), let d = parseNumber(row[idx]) {
-                        vals.append(d)
-                    } else {
-                        vals.append(.nan)
-                    }
-                }
-                return Series(
-                    name: name,
-                    values: vals
-                )
-            }
-
-            func firstNonEmpty(inColumn nameCol: String) -> String? {
-                guard let cIdx = index(nameCol) else { return nil }
-                for r in rows {
-                    if r.indices.contains(cIdx) {
-                        let v = r[cIdx].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !v.isEmpty { return v }
-                    }
-                }
-                return nil
-            }
-
-            func seriesPlan(for headers: [String]) -> SeriesPlan {
-                switch type {
-                    
-                case "barCat", "barGrouped":
-                    if let xIdx = index("x"), let yIdx = index("y") {
-                        let labels = rows.compactMap { row in
-                            row.indices.contains(xIdx) ? row[xIdx] : nil
-                        }
-                        let values = rows.compactMap { row in
-                            row.indices.contains(yIdx) ? parseNumber(row[yIdx]) : nil
-                        }
-                        let s = Series(name: "Current", values: values)
-                        var pkg = DataPackage()
-                        pkg.labels = labels
-                        pkg.series = [s]
-                        pkg.format = format.isEmpty ? "default" : format
-                        DispatchQueue.main.async {
-                            self.dataPackage = pkg
-                            self.isLoading = false
-                        }
-                        return .built([s])
-                    }
-                    fallthrough
-                    
-                case "lineWeek", "barWeek":
-                    var cols: [(String, Int)] = []
-                    if let a = index("Estimated weekly value") {
-                        cols.append(("Current", a))
-                    }
-                    if !cols.isEmpty { return .columns(cols) }
-                    fallthrough
-
-                case "yoyExp", "line3mo", "line12mo", "line", "lineYr":
-                    var cols: [(String, Int)] = []
-                    if let a = index("Value") { cols.append(("Current", a)) }
-                    if let i = index("Value (previous year)") { cols.append(("Previous Year", i)) }
-                    if !cols.isEmpty { return .columns(cols) }
-                    fallthrough
-
-                case "lineComp":
-                    var cols: [(String, Int)] = []
-                    if let a = index("Value (This Area)") ?? index("Value (Selected Area)") {
-                        cols.append(("Selected Area", a))
-                    }
-                    if let i = index("Value (Indiana)") {
-                        cols.append(("Indiana", i))
-                    }
-                    if !cols.isEmpty { return .columns(cols) }
-                    fallthrough
-
-                case "lineTrend":
-                    // Build directly here: pick ONE baseline series, then append the four trend overlays
-                    let baseIdx: Int? = index("Estimated weekly value") ?? index("Value") ?? index("y1") ?? index("y")
-                    if let bIdx = baseIdx {
-                        // Base name from y1name/yname if present
-                        let baseName: String = {
-                            if bIdx == index("y1"), let nm = firstNonEmpty(inColumn: "y1name") { return nm }
-                            if bIdx == index("y"),  let nm = firstNonEmpty(inColumn: "yname")  { return nm }
-                            return "Weekly"
-                        }()
-                        let base = makeSeries(name: baseName, idx: bIdx)
-                        let v = base.values
-                        let n = v.count
-
-                        func mean(_ xs: ArraySlice<Double>) -> Double? {
-                            let vals = xs.filter { !$0.isNaN }
-                            guard !vals.isEmpty else { return nil }
-                            return vals.reduce(0, +) / Double(vals.count)
-                        }
-                        func safeSlice(_ start: Int, _ end: Int) -> ArraySlice<Double>? {
-                            let s = max(0, start), e = min(n, end)
-                            return (s < e) ? v[s..<e] : nil
-                        }
-                        // Replacement for repLine: overlay only in window, NaN elsewhere
-                        func windowLine(_ value: Double?, start: Int, end: Int, count: Int) -> [Double]? {
-                            guard let v = value else { return nil }
-                            var arr = Array(repeating: Double.nan, count: count)
-                            let s = max(0, start)
-                            let e = min(count, end)
-                            if s < e {
-                                for i in s..<e { arr[i] = v }
-                            }
-                            return arr
-                        }
-
-                        // Your exact windows
-                        let recentAvg      = safeSlice(n-3,     n).flatMap(mean)
-                        let previousAvg    = safeSlice(n-9,   n-3).flatMap(mean)
-                        let yoyRecentAvg   = safeSlice(n-3-52, n-52).flatMap(mean)
-                        let yoyPreviousAvg = safeSlice(n-9-52, n-3-52).flatMap(mean)
-
-                        var built: [Series] = [base]
-                        if let line = windowLine(recentAvg, start: n-3, end: n, count: n) {
-                            built.append(Series(name: "Last 3 weeks", values: line))
-                        }
-                        if let line = windowLine(previousAvg, start: n-9, end: n-3, count: n) {
-                            built.append(Series(name: "Prior 6 weeks", values: line))
-                        }
-                        if let line = windowLine(yoyRecentAvg, start: n-3-52, end: n-52, count: n) {
-                            built.append(Series(name: "YoY Recent", values: line))
-                        }
-                        if let line = windowLine(yoyPreviousAvg, start: n-9-52, end: n-3-52, count: n) {
-                            built.append(Series(name: "YoY Previous", values: line))
-                        }
-                        return .built(built)
-                    }
-                    fallthrough
-
-                case "dotPlot":
-                    var cols: [(String, Int)] = []
-                    var n = 1
-                    while let yIdx = index("y\(n)") {
-                        let suggested = firstNonEmpty(inColumn: "y\(n)name") ?? "Series \(n)"
-                        cols.append((suggested, yIdx))
-                        n += 1
-                    }
-                    if !cols.isEmpty { return .columns(cols) }
-                    if let y = index("y")  { cols.append((firstNonEmpty(inColumn: "yname")  ?? "Current",    y)) }
-                    if let y2 = index("y2"){ cols.append((firstNonEmpty(inColumn: "y2name") ?? "Comparison", y2)) }
-                    if !cols.isEmpty { return .columns(cols) }
-                    fallthrough
-
-                default:
-                    var cols: [(String, Int)] = []
-                    if let v = index("Value") { cols.append(("Value", v)) }
-                    var n = 1
-                    while let yIdx = index("y\(n)") {
-                        let suggested = firstNonEmpty(inColumn: "y\(n)name") ?? "Series \(n)"
-                        cols.append((suggested, yIdx))
-                        n += 1
-                    }
-                    if cols.isEmpty, let y = index("y") { cols.append(("Current", y)) }
-                    if let y2 = index("y2") { cols.append(("Comparison", y2)) }
-                    return .columns(cols)
-                }
-            }
-            
-            enum SeriesPlan {
-                case columns([(String, Int)])   // use factory later
-                case built([Series])            // already built here (e.g., lineTrend)
-            }
-            let plan = seriesPlan(for: headers)
-            let built: [Series]
-            switch plan {
-            case .columns(let cols):
-                built = cols.map { makeSeries(name: $0.0, idx: $0.1) }
-            case .built(let s):
-                built = s
-            }
-            var pkg = DataPackage()
-            pkg.labels = labels
-            pkg.dates = dates
-            pkg.series = built
-            pkg.format = format.isEmpty ? "default" : format
-
-            DispatchQueue.main.async {
+            if let pkg = VizNormalizer.makePackage(
+                chartData: chartData,
+                type: type,
+                format: format,
+                variant: nil,
+                title: title
+            ) {
                 self.dataPackage = pkg
-                self.isLoading = false
             }
-            return
-        } catch {
-            print("Error loading CSV: \(error)")
+            self.isLoading = false
         }
     }
+
+}
+
+struct WebReportPrintView: View {
+    let url: URL
+
+    var body: some View {
+        WebReportPrintController(url: url)
+            .ignoresSafeArea()
+    }
+}
+
+struct WebReportPrintController: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> WebReportPrintViewController {
+        WebReportPrintViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: WebReportPrintViewController, context: Context) {}
+}
+
+final class WebReportPrintViewController: UIViewController, WKNavigationDelegate {
+    private let url: URL
+    private let webView = WKWebView(frame: .zero)
+    private var hasPresentedPrint = false
+
+    init(url: URL) {
+        self.url = url
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        print("Loading export URL:", url.absoluteString)
+        webView.navigationDelegate = self
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(webView)
+
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .close,
+            target: self,
+            action: #selector(closeTapped)
+        )
+
+        webView.load(URLRequest(url: url))
+    }
+
+    @objc private func closeTapped() {
+        dismiss(animated: true)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard !hasPresentedPrint else { return }
+        hasPresentedPrint = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            let printController = UIPrintInteractionController.shared
+            let info = UIPrintInfo(dictionary: nil)
+            info.outputType = .general
+            info.jobName = "Report Export"
+            printController.printInfo = info
+            printController.printFormatter = webView.viewPrintFormatter()
+            printController.present(animated: true)
+        }
+    }
+}
+
+struct ExportURLItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }
