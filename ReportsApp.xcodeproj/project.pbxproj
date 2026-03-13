@@ -75,6 +75,7 @@
 		71F09F522E5FE99A0086B5C3 /* Exceptions for "ReportsApp" folder in "ReportsWatchApp Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Models/ChatModels.swift,
 				Models/Geo.swift,
 				Models/MonthlyVM.swift,
 				Models/Report.swift,
@@ -89,6 +90,7 @@
 		71F09F602E5FEC130086B5C3 /* Exceptions for "ReportsApp" folder in "ReportsApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Info.plist,
 				Models/MonthlyVM.swift,
 				Views/WatchHomeView.swift,
 				Views/WatchSettingsView.swift,
@@ -655,6 +657,7 @@
 				DEVELOPMENT_TEAM = JY22826US7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ReportsApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "IAR Housing Hub";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -686,6 +689,7 @@
 				DEVELOPMENT_TEAM = JY22826US7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ReportsApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "IAR Housing Hub";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

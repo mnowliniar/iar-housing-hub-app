@@ -237,6 +237,43 @@ struct TileCard: View {
     }
 }
 
+struct TileCardSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(.white.opacity(0.35))
+                .frame(width: 120, height: 18)
+
+            RoundedRectangle(cornerRadius: 4)
+                .fill(.white.opacity(0.22))
+                .frame(width: 80, height: 12)
+
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.white.opacity(0.28))
+                    .frame(width: 90, height: 34)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(.white.opacity(0.22))
+                        .frame(width: 44, height: 12)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(.white.opacity(0.18))
+                        .frame(width: 70, height: 10)
+                }
+            }
+
+            RoundedRectangle(cornerRadius: 6)
+                .fill(.white.opacity(0.16))
+                .frame(height: 44)
+        }
+        .padding()
+        .frame(height: 169)
+        .glassCard(cornerRadius: 12)
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+    }
+}
+
 struct MarketDashboardView: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @EnvironmentObject var app: AppState
@@ -250,6 +287,8 @@ struct MarketDashboardView: View {
     }
     @State private var tiles: [Tile] = []
     @State private var isLoading = true
+    @State private var showLoadedTiles = false
+    @State private var showSkeletonTiles = true
     let geoID: String
     var vizIDs: [Int] { selectedVizIDs }
 
@@ -260,11 +299,19 @@ struct MarketDashboardView: View {
         let skeletonCount = min(3, vizIDs.count)
 
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
-                if isLoading {
-                    ForEach(0..<skeletonCount) { _ in RoundedRectangle(cornerRadius: 16).fill(.gray.opacity(0.15)).frame(height: 120) }
-                } else {
-                    ForEach(tiles) { TileCard(tile: $0) }
+            ZStack(alignment: .topLeading) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(0..<skeletonCount, id: \.self) { _ in
+                        TileCardSkeleton()
+                    }
+                }
+                .opacity(showSkeletonTiles ? 1 : 0)
+
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(tiles) { tile in
+                        TileCard(tile: tile)
+                            .opacity(showLoadedTiles ? 1 : 0)
+                    }
                 }
             }
             .padding()
@@ -293,6 +340,9 @@ struct MarketDashboardView: View {
                 )
         )
         .task {
+            isLoading = true
+            showSkeletonTiles = true
+            showLoadedTiles = false
             do {
                 let svc = DashboardService()
                 let fetched = try await svc.fetchTiles(geoID: app.selectedGeoID, vizIDs: vizIDs)
@@ -301,9 +351,13 @@ struct MarketDashboardView: View {
 #if DEBUG
                 print("Dashboard load error:", error)
 #endif
-                tiles = [];
+                tiles = []
             }
             isLoading = false
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showLoadedTiles = true
+                showSkeletonTiles = false
+            }
         }
         .onAppear {
             app.selectedGeoID = storedGeoID
@@ -311,6 +365,8 @@ struct MarketDashboardView: View {
         .onChange(of: app.selectedGeoID) { newValue in
             storedGeoID = newValue
             isLoading = true
+            showSkeletonTiles = true
+            showLoadedTiles = false
             Task {
                 let svc = DashboardService()
                 do {
@@ -318,10 +374,16 @@ struct MarketDashboardView: View {
                     tiles = Array(fetched.prefix(3))
                 } catch { tiles = [] }
                 isLoading = false
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showLoadedTiles = true
+                    showSkeletonTiles = false
+                }
             }
         }
         .onChange(of: vizIDsStored) { _ in
             isLoading = true
+            showSkeletonTiles = true
+            showLoadedTiles = false
             Task {
                 let svc = DashboardService()
                 do {
@@ -329,6 +391,10 @@ struct MarketDashboardView: View {
                     tiles = Array(fetched.prefix(3))
                 } catch { tiles = [] }
                 isLoading = false
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showLoadedTiles = true
+                    showSkeletonTiles = false
+                }
             }
         }
         .sheet(isPresented: $showGeoPicker) {
@@ -336,6 +402,8 @@ struct MarketDashboardView: View {
                 app.selectedGeoID = newGeo
                 showGeoPicker = false
                 isLoading = true
+                showSkeletonTiles = true
+                showLoadedTiles = false
                 Task {
                     let svc = DashboardService()
                     do {
@@ -343,6 +411,10 @@ struct MarketDashboardView: View {
                         tiles = Array(fetched.prefix(3))
                     } catch { tiles = [] }
                     isLoading = false
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showLoadedTiles = true
+                        showSkeletonTiles = false
+                    }
                 }
             })
         }

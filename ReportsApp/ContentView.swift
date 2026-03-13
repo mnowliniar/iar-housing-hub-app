@@ -3,29 +3,71 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.horizontalSizeClass) private var hSize
+    @State private var selectedTab = 0
 
     var body: some View {
         if hSize == .regular { // iPad: sidebar + main content
             NavigationSplitView {
-                // LEFT: your existing reports list as the picker
                 ReportListView()
                     .navigationTitle("Reports")
             } detail: {
-                // RIGHT: Home dashboard as main content
-                HomeView()
-                    .navigationTitle("Home")
-            }
-        } else { // iPhone: show Home first, link to reports
-            NavigationStack {
-                HomeView()
-                    .navigationTitle("Home")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            NavigationLink("Reports") {
-                                ReportListView()
-                            }
-                        }
+                TabView(selection: $selectedTab) {
+                    NavigationStack {
+                        HomeView()
+                            .navigationTitle("Home")
                     }
+                    .tabItem {
+                        Label("Home", systemImage: "house")
+                    }
+                    .tag(0)
+
+                    NavigationStack {
+                        ReportListView()
+                            .navigationTitle("Reports")
+                    }
+                    .tabItem {
+                        Label("Reports", systemImage: "doc.text")
+                    }
+                    .tag(1)
+
+                    NavigationStack {
+                        ChatView()
+                            .navigationTitle("Spark")
+                    }
+                    .tabItem {
+                        Label("Spark", systemImage: "sparkles")
+                    }
+                    .tag(2)
+                }
+            }
+        } else { // iPhone: tab bar navigation
+            TabView(selection: $selectedTab) {
+                NavigationStack {
+                    HomeView()
+                        .navigationTitle("Home")
+                }
+                .tabItem {
+                    Label("Home", systemImage: "house")
+                }
+                .tag(0)
+
+                NavigationStack {
+                    ReportListView()
+                        .navigationTitle("Reports")
+                }
+                .tabItem {
+                    Label("Reports", systemImage: "doc.text")
+                }
+                .tag(1)
+
+                NavigationStack {
+                    ChatView()
+                        .navigationTitle("Spark")
+                }
+                .tabItem {
+                    Label("Spark", systemImage: "sparkles")
+                }
+                .tag(2)
             }
         }
     }

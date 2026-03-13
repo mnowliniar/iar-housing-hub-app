@@ -19,6 +19,7 @@ struct ReportSummaryView: View {
     @State private var summary: ReportSummary?
     @State private var isLoading = true
     @State private var exportItem: ExportURLItem?
+    @State private var shareItem: ShareURLItem?
     @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
@@ -37,16 +38,30 @@ struct ReportSummaryView: View {
                                     .font(.subheadline).foregroundColor(.secondary)
                             }
                             Spacer()
-                            Button {
-                                guard let url = makeWebReportURL() else { return }
-                                print("Export URL:", url.absoluteString)
-                                exportItem = ExportURLItem(url: url)
-                            } label: {
-                                Label("Export", systemImage: "printer")
-                                    .labelStyle(.iconOnly)
-                                    .font(.title3)
+                            HStack(spacing: 12) {
+                                Button {
+                                    Task {
+                                        if let url = await fetchShareURL() {
+                                            shareItem = ShareURLItem(url: url)
+                                        }
+                                    }
+                                } label: {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                        .labelStyle(.iconOnly)
+                                        .font(.title3)
+                                }
+
+                                Button {
+                                    guard let url = makeWebReportURL() else { return }
+                                    print("Export URL:", url.absoluteString)
+                                    exportItem = ExportURLItem(url: url)
+                                } label: {
+                                    Label("Print", systemImage: "printer")
+                                        .labelStyle(.iconOnly)
+                                        .font(.title3)
+                                }
                             }
-                            .accessibilityLabel("Export report")
+                            .accessibilityLabel("Report actions")
                         }
                     }
                     .padding(.horizontal)
@@ -118,6 +133,9 @@ struct ReportSummaryView: View {
         .sheet(item: $exportItem) { item in
             WebReportPrintView(url: item.url)
         }
+        .sheet(item: $shareItem) { item in
+            ActivityView(activityItems: [item.url])
+        }
     }
 
     func loadSummary() async {
@@ -144,6 +162,44 @@ struct ReportSummaryView: View {
         let baseURLString = "https://data.indianarealtors.com"
         let path = "/reports/viewreport/onepager/\(report.id)/\(geo.geoid)/\(year)/\(month)/\(day)/"
         return URL(string: baseURLString + path)
+    }
+
+    func fetchShareURL() async -> URL? {
+        guard let url = URL(string: "https://data.indianarealtors.com/api/create-report-share/") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: updateDate) else { return nil }
+
+        let calendar = Calendar.current
+
+        let payload: [String: Any] = [
+            "report_id": report.id,
+            "geo_id": geo.geoid,
+            "year": calendar.component(.year, from: date),
+            "month": calendar.component(.month, from: date),
+            "day": calendar.component(.day, from: date),
+            "proptype": "all"
+        ]
+
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let urlString = json["url"] as? String {
+                return URL(string: urlString)
+            }
+        } catch {
+            print("Share link error:", error)
+        }
+
+        return nil
     }
 }
 
@@ -759,4 +815,19 @@ final class WebReportPrintViewController: UIViewController, WKNavigationDelegate
 struct ExportURLItem: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+struct ShareURLItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
