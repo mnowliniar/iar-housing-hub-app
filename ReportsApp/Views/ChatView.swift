@@ -7,6 +7,7 @@
 
 
 import SwiftUI
+import UIKit
 import WebKit
 import Charts
 
@@ -376,42 +377,95 @@ private struct ChatTableView: View {
         return row[index]
     }
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 0) {
-                    ForEach(0..<columnCount, id: \.self) { index in
-                        Text(headerText(at: index))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: cellWidth, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                    }
-                }
-                .background(BrandColors.teal.opacity(0.10))
+    private var tableAsTSV: String {
+        let headerLine = table.headers.joined(separator: "\t")
+        let rowLines = table.rows.map { $0.joined(separator: "\t") }
+        return ([headerLine] + rowLines).joined(separator: "\n")
+    }
 
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { rowIndex, row in
+    private var tableAsCSV: String {
+        func escape(_ value: String) -> String {
+            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escaped)\""
+        }
+
+        let headerLine = table.headers.map(escape).joined(separator: ",")
+        let rowLines = table.rows.map { row in
+            row.map(escape).joined(separator: ",")
+        }
+        return ([headerLine] + rowLines).joined(separator: "\n")
+    }
+
+    private func makeCSVFile() -> URL? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("spark-table-\(UUID().uuidString).csv")
+
+        do {
+            try tableAsCSV.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            print("Failed to write CSV:", error)
+            return nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 0) {
                         ForEach(0..<columnCount, id: \.self) { index in
-                            Text(cellText(in: row, at: index))
-                                .font(.caption)
+                            Text(headerText(at: index))
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .frame(width: cellWidth, alignment: .leading)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                         }
                     }
-                    .background(rowIndex.isMultiple(of: 2) ? Color(.secondarySystemBackground) : Color.clear)
+                    .background(BrandColors.teal.opacity(0.10))
+
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { rowIndex, row in
+                        HStack(spacing: 0) {
+                            ForEach(0..<columnCount, id: \.self) { index in
+                                Text(cellText(in: row, at: index))
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                    .frame(width: cellWidth, alignment: .leading)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                            }
+                        }
+                        .background(rowIndex.isMultiple(of: 2) ? Color(.secondarySystemBackground) : Color.clear)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 16) {
+                Button {
+                    UIPasteboard.general.string = tableAsTSV
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+
+                if let url = makeCSVFile() {
+                    ShareLink(item: url) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
