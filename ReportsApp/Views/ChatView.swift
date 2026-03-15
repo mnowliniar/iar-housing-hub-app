@@ -8,9 +8,11 @@
 
 import SwiftUI
 import WebKit
+import Charts
 
 struct ChatView: View {
     @StateObject private var chat = ChatManager()
+    @FocusState private var inputFocused: Bool
     @State private var activeGutsContent: GutsModalContent?
 
     private func associatedGutsText(for index: Int) -> String? {
@@ -68,7 +70,8 @@ struct ChatView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    //LazyVStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 12) {
                         if chat.messages.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Ask a question")
@@ -93,13 +96,17 @@ struct ChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: chat.messages.count) { _, _ in
-                    if let last = chat.messages.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .top)
-                        }
-                    }
-                }
+//                .onChange(of: chat.pendingScrollTarget) { _, target in
+//                    guard let target else { return }
+//
+//                    Task { @MainActor in
+//                        try? await Task.sleep(for: .milliseconds(300))
+//                        withAnimation(.easeOut(duration: 0.2)) {
+//                            proxy.scrollTo(target, anchor: .top)
+//                        }
+//                        chat.pendingScrollTarget = nil
+//                    }
+//                }
             }
 
             Divider()
@@ -108,8 +115,13 @@ struct ChatView: View {
                 TextField("Ask about the market…", text: $chat.inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)
+                    .focused($inputFocused)
 
                 Button {
+                    let trimmed = chat.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+
+                    inputFocused = false
                     Task { await chat.sendCurrentMessage() }
                 } label: {
                     if chat.isSending {
@@ -183,11 +195,22 @@ private struct ChatBubble: View {
         case .guts:
             EmptyView()
 
+        case .chart:
+            if let json = message.chartSpecJSON,
+               let data = json.data(using: .utf8),
+               let aiSpec = try? JSONDecoder().decode(AIChartSpec.self, from: data) {
+                SparkChartView(spec: ChartNormalizer.build(from: aiSpec))
+                    .frame(height: 220)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text("Chart unavailable")
+                    .foregroundStyle(.secondary)
+            }
         default:
             RichChatText(
-                text: message.text,
-                foregroundStyle: isUser ? .white : (isSystem ? .secondary : .primary),
-                preserveStructure: !isUser && !isSystem
+                blocks: message.displayBlocks,
+                fallbackText: message.text,
+                foregroundStyle: isUser ? .white : (isSystem ? .secondary : .primary)
             )
             .multilineTextAlignment(.leading)
         }
@@ -209,6 +232,8 @@ private struct ChatBubble: View {
         case .gutslink:
             return Color(.tertiarySystemBackground)
         case .guts:
+            return Color(.secondarySystemBackground)
+        case .chart:
             return Color(.secondarySystemBackground)
         case .error:
             return Color.red.opacity(0.12)
@@ -283,78 +308,45 @@ private struct StatusPanel: View {
 }
 
 private struct RichChatText: View {
-    let text: String
+    let blocks: [ChatDisplayBlock]?
+    let fallbackText: String
     let foregroundStyle: Color
-    let preserveStructure: Bool
-
-    private var normalizedText: String {
-        text
-            .replacingOccurrences(of: "\\n", with: "\n")
-            .replacingOccurrences(of: "\r\n", with: "\n")
-    }
-
-    private var blocks: [ChatTextBlock] {
-        guard preserveStructure else {
-            return [.paragraph(normalizedText)]
-        }
-
-        let lines = normalizedText.components(separatedBy: "\n")
-        var result: [ChatTextBlock] = []
-        var paragraphBuffer: [String] = []
-
-        func flushParagraph() {
-            let paragraph = paragraphBuffer
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if !paragraph.isEmpty {
-                result.append(.paragraph(paragraph))
-            }
-            paragraphBuffer.removeAll()
-        }
-
-        for rawLine in lines {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-
-            if line.isEmpty {
-                flushParagraph()
-                continue
-            }
-
-            if line.hasPrefix("- ") {
-                flushParagraph()
-                let bulletText = String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
-                result.append(.bullet(bulletText))
-            } else {
-                paragraphBuffer.append(rawLine)
-            }
-        }
-
-        flushParagraph()
-        return result.isEmpty ? [.paragraph(normalizedText)] : result
-    }
 
     var body: some View {
+        let resolvedBlocks = blocks ?? [
+            ChatDisplayBlock(
+                kind: .paragraph,
+                plainText: fallbackText,
+                attributedText: nil,
+                tableData: nil
+            )
+        ]
+
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .paragraph(let paragraph):
+            ForEach(resolvedBlocks) { block in
+                switch block.kind {
+                case .paragraph:
                     InlineMarkdownText(
-                        text: paragraph,
+                        plainText: block.plainText,
+                        attributedText: block.attributedText,
                         foregroundStyle: foregroundStyle
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
-                case .bullet(let bullet):
+
+                case .bullet:
                     HStack(alignment: .top, spacing: 8) {
                         Text("•")
                             .foregroundStyle(foregroundStyle)
                         InlineMarkdownText(
-                            text: bullet,
+                            plainText: block.plainText,
+                            attributedText: block.attributedText,
                             foregroundStyle: foregroundStyle
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                case .table:
+                    if let table = block.tableData {
+                        ChatTableView(table: table)
                     }
                 }
             }
@@ -362,34 +354,85 @@ private struct RichChatText: View {
     }
 }
 
-private struct InlineMarkdownText: View {
-    let text: String
-    let foregroundStyle: Color
+private struct ChatTableView: View {
+    let table: ChatTableData
+
+    private let cellWidth: CGFloat = 120
+
+    private var columnCount: Int {
+        max(
+            table.headers.count,
+            table.rows.map(\.count).max() ?? 0
+        )
+    }
+
+    private func headerText(at index: Int) -> String {
+        guard index < table.headers.count else { return "" }
+        return table.headers[index]
+    }
+
+    private func cellText(in row: [String], at index: Int) -> String {
+        guard index < row.count else { return "" }
+        return row[index]
+    }
 
     var body: some View {
-        if let attributed = try? AttributedString(
-            markdown: text,
-            options: AttributedString.MarkdownParsingOptions(
-                allowsExtendedAttributes: false, interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                failurePolicy: .returnPartiallyParsedIfPossible,
-                languageCode: nil
+        ScrollView(.horizontal, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 0) {
+                    ForEach(0..<columnCount, id: \.self) { index in
+                        Text(headerText(at: index))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: cellWidth, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                    }
+                }
+                .background(BrandColors.teal.opacity(0.10))
+
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { rowIndex, row in
+                    HStack(spacing: 0) {
+                        ForEach(0..<columnCount, id: \.self) { index in
+                            Text(cellText(in: row, at: index))
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                                .frame(width: cellWidth, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                        }
+                    }
+                    .background(rowIndex.isMultiple(of: 2) ? Color(.secondarySystemBackground) : Color.clear)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
-        ) {
-            Text(attributed)
-                .foregroundStyle(foregroundStyle)
-                .textSelection(.enabled)
-        } else {
-            Text(text)
-                .foregroundStyle(foregroundStyle)
-                .textSelection(.enabled)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private enum ChatTextBlock {
-    case paragraph(String)
-    case bullet(String)
+private struct InlineMarkdownText: View {
+    let plainText: String
+    let attributedText: AttributedString?
+    let foregroundStyle: Color
+
+    var body: some View {
+        Group {
+            if let attributedText {
+                Text(attributedText)
+            } else {
+                Text(plainText)
+            }
+        }
+        .foregroundStyle(foregroundStyle)
+        .textSelection(.enabled)
+    }
 }
+
 
 private struct GutsModalContent: Identifiable, Equatable {
     let text: String
@@ -491,5 +534,164 @@ private struct HTMLTextView: UIViewRepresentable {
         }
 
         return "<div class=\"intro\">\(working)</div>"
+    }
+}
+
+private struct AIChartSpec: Decodable {
+    let chartType: String?
+    let labels: [String]?
+    let title: String?
+    let datasets: [AIChartDataset]?
+
+    enum CodingKeys: String, CodingKey {
+        case chartType = "chart_type"
+        case labels
+        case title
+        case datasets
+    }
+}
+
+private struct AIChartDataset: Decodable {
+    let label: String?
+    let data: [Double]?
+    let borderWidth: Double?
+    let tension: Double?
+    let pointRadius: Double?
+    let fill: Bool?
+    let borderColor: String?
+    let backgroundColor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case data
+        case borderWidth
+        case tension
+        case pointRadius
+        case fill
+        case borderColor
+        case backgroundColor
+    }
+}
+
+private enum ChartKind: String {
+    case line
+    case bar
+}
+
+private struct NormalizedChartSpec {
+    let chartType: ChartKind
+    let title: String?
+    let series: [NormalizedSeries]
+}
+
+private struct NormalizedSeries: Identifiable {
+    let id = UUID()
+    let label: String
+    let points: [ChartPoint]
+    let lineWidth: Double
+    let pointRadius: Double
+    let fill: Bool
+    let color: Color
+    let fillColor: Color
+}
+
+private struct ChartPoint: Identifiable {
+    let id = UUID()
+    let xLabel: String
+    let yValue: Double
+}
+
+private enum ChartNormalizer {
+    static let baseColors: [Color] = [
+        BrandColors.teal,
+        .blue,
+        .purple,
+        .orange,
+        .pink,
+        .green
+    ]
+
+    static func build(from spec: AIChartSpec) -> NormalizedChartSpec {
+        let labels = spec.labels ?? []
+        let chartType = ChartKind(rawValue: spec.chartType ?? "") ?? .line
+
+        let series: [NormalizedSeries] = (spec.datasets ?? []).enumerated().map { index, ds in
+            let base = baseColors[index % baseColors.count]
+            let values = ds.data ?? []
+            let points = zip(labels, values).map { label, value in
+                ChartPoint(xLabel: label, yValue: value)
+            }
+
+            return NormalizedSeries(
+                label: ds.label ?? "Series \(index + 1)",
+                points: points,
+                lineWidth: ds.borderWidth ?? 2,
+                pointRadius: ds.pointRadius ?? 0,
+                fill: ds.fill ?? false,
+                color: base,
+                fillColor: base.opacity(0.2)
+            )
+        }
+
+        return NormalizedChartSpec(
+            chartType: chartType,
+            title: spec.title,
+            series: series
+        )
+    }
+}
+
+private struct SparkChartView: View {
+    let spec: NormalizedChartSpec
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let title = spec.title, !title.isEmpty {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Chart {
+                ForEach(spec.series) { series in
+                    if spec.chartType == .line, series.fill {
+                        ForEach(series.points) { point in
+                            AreaMark(
+                                x: .value("Label", point.xLabel),
+                                y: .value(series.label, point.yValue)
+                            )
+                            .foregroundStyle(series.fillColor)
+                        }
+                    }
+
+                    ForEach(series.points) { point in
+                        switch spec.chartType {
+                        case .line:
+                            LineMark(
+                                x: .value("Label", point.xLabel),
+                                y: .value(series.label, point.yValue)
+                            )
+                            .foregroundStyle(series.color)
+                            .lineStyle(StrokeStyle(lineWidth: series.lineWidth))
+
+                            if series.pointRadius > 0 {
+                                PointMark(
+                                    x: .value("Label", point.xLabel),
+                                    y: .value(series.label, point.yValue)
+                                )
+                                .foregroundStyle(series.color)
+                            }
+
+                        case .bar:
+                            BarMark(
+                                x: .value("Label", point.xLabel),
+                                y: .value(series.label, point.yValue)
+                            )
+                            .foregroundStyle(series.color)
+                        }
+                    }
+                }
+            }
+            .chartLegend(.visible)
+        }
     }
 }

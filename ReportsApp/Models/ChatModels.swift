@@ -24,6 +24,25 @@ enum ChatPayloadType: String, Codable {
     case hidden
 }
 
+enum ChatDisplayBlockKind: Equatable {
+    case paragraph
+    case bullet
+    case table
+}
+
+struct ChatTableData: Equatable {
+    let headers: [String]
+    let rows: [[String]]
+}
+
+struct ChatDisplayBlock: Identifiable, Equatable {
+    let id = UUID()
+    let kind: ChatDisplayBlockKind
+    let plainText: String
+    let attributedText: AttributedString?
+    let tableData: ChatTableData?
+}
+
 struct BackendChatMessage: Decodable {
     let type: String
     let body: FlexibleBody
@@ -144,16 +163,22 @@ struct ChatMessage: Identifiable, Equatable {
     let text: String
     let payloadType: ChatPayloadType?
     let isEphemeral: Bool
+    let chartSpecJSON: String?
+    let displayBlocks: [ChatDisplayBlock]?
 
     init(
         sender: ChatSender,
         text: String,
         payloadType: ChatPayloadType? = nil,
-        isEphemeral: Bool = false
+        isEphemeral: Bool = false,
+        chartSpecJSON: String? = nil,
+        displayBlocks: [ChatDisplayBlock]? = nil
     ) {
         self.sender = sender
         self.text = text
         self.payloadType = payloadType
         self.isEphemeral = isEphemeral
+        self.chartSpecJSON = chartSpecJSON
+        self.displayBlocks = displayBlocks
     }
 }

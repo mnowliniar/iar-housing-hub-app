@@ -17,6 +17,8 @@ final class ChatManager: ObservableObject {
     @Published var conversationName: String?
     @Published var statusText: String?
     @Published var statusMessages: [ChatMessage] = []
+    @Published var pendingScrollTarget: UUID?
+    private var lastUserMessageID: UUID?
 
     @AppStorage("currentChatThreadID") private var storedThreadID: String = ""
 
@@ -36,6 +38,8 @@ final class ChatManager: ObservableObject {
         messages = []
         inputText = ""
         conversationName = nil
+        pendingScrollTarget = nil
+        lastUserMessageID = nil
         resetStatusState()
     }
 
@@ -44,7 +48,13 @@ final class ChatManager: ObservableObject {
         guard !prompt.isEmpty, !isSending else { return }
 
         inputText = ""
-        messages.append(ChatMessage(sender: .user, text: prompt))
+        let userMessage = ChatMessage(
+            sender: .user,
+            text: prompt,
+            displayBlocks: buildDisplayBlocks(from: prompt, enableInlineMarkdown: false, preserveStructure: false)
+        )
+        messages.append(userMessage)
+        lastUserMessageID = userMessage.id
         await send(prompt: prompt)
     }
 
@@ -93,6 +103,7 @@ final class ChatManager: ObservableObject {
 
             resetStatusState()
             isSending = false
+            pendingScrollTarget = lastUserMessageID
         } catch {
             removeEphemeralMessages()
             messages.append(
@@ -104,6 +115,7 @@ final class ChatManager: ObservableObject {
             )
             resetStatusState()
             isSending = false
+            pendingScrollTarget = lastUserMessageID
         }
     }
 
@@ -180,8 +192,9 @@ final class ChatManager: ObservableObject {
                 messages.append(
                     ChatMessage(
                         sender: .assistant,
-                        text: "[Chart]\n\(text)",
-                        payloadType: payload
+                        text: "",
+                        payloadType: payload,
+                        chartSpecJSON: text
                     )
                 )
             default:
@@ -189,7 +202,12 @@ final class ChatManager: ObservableObject {
                     ChatMessage(
                         sender: sender,
                         text: text,
-                        payloadType: payload
+                        payloadType: payload,
+                        displayBlocks: buildDisplayBlocks(
+                            from: text,
+                            enableInlineMarkdown: sender == .assistant && payload != .gutslink,
+                            preserveStructure: sender == .assistant && payload != .gutslink
+                        )
                     )
                 )
             }
@@ -208,7 +226,8 @@ final class ChatManager: ObservableObject {
                     sender: .system,
                     text: text,
                     payloadType: payload,
-                    isEphemeral: true
+                    isEphemeral: true,
+                    displayBlocks: buildDisplayBlocks(from: text, enableInlineMarkdown: false, preserveStructure: false)
                 )
             default:
                 return nil
@@ -227,5 +246,153 @@ final class ChatManager: ObservableObject {
     private func resetStatusState() {
         statusMessages = []
         statusText = nil
+    }
+
+    private func buildDisplayBlocks(
+        from text: String,
+        enableInlineMarkdown: Bool,
+        preserveStructure: Bool
+    ) -> [ChatDisplayBlock] {
+        let normalizedText = text
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+
+        guard preserveStructure else {
+            return [
+                ChatDisplayBlock(
+                    kind: .paragraph,
+                    plainText: normalizedText,
+                    attributedText: makeInlineMarkdown(normalizedText, enabled: enableInlineMarkdown),
+                    tableData: nil
+                )
+            ]
+        }
+
+        let lines = normalizedText.components(separatedBy: "\n")
+
+        func isTableSeparator(_ line: String) -> Bool {
+            let trimmed = line.replacingOccurrences(of: " ", with: "")
+            return trimmed.contains("|-")
+        }
+
+        var result: [ChatDisplayBlock] = []
+        var paragraphBuffer: [String] = []
+
+        func flushParagraph() {
+            let paragraph = paragraphBuffer
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !paragraph.isEmpty {
+                result.append(
+                    ChatDisplayBlock(
+                        kind: .paragraph,
+                        plainText: paragraph,
+                        attributedText: makeInlineMarkdown(paragraph, enabled: enableInlineMarkdown),
+                        tableData: nil
+                    )
+                )
+            }
+            paragraphBuffer.removeAll()
+        }
+
+        var index = 0
+        while index < lines.count {
+            let rawLine = lines[index]
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+            if line.isEmpty {
+                flushParagraph()
+                index += 1
+                continue
+            }
+
+            if line.contains("|"), index + 1 < lines.count, isTableSeparator(lines[index + 1]) {
+                flushParagraph()
+
+                let headers = rawLine
+                    .split(separator: "|", omittingEmptySubsequences: true)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+
+                var rows: [[String]] = []
+                var rowIndex = index + 2
+
+                while rowIndex < lines.count {
+                    let rowLine = lines[rowIndex].trimmingCharacters(in: .whitespaces)
+                    if rowLine.isEmpty || !rowLine.contains("|") {
+                        break
+                    }
+
+                    let cells = lines[rowIndex]
+                        .split(separator: "|", omittingEmptySubsequences: true)
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+
+                    if !cells.isEmpty {
+                        rows.append(cells)
+                    }
+                    rowIndex += 1
+                }
+
+                if !headers.isEmpty {
+                    result.append(
+                        ChatDisplayBlock(
+                            kind: .table,
+                            plainText: "",
+                            attributedText: nil,
+                            tableData: ChatTableData(headers: headers, rows: rows)
+                        )
+                    )
+                }
+
+                index = rowIndex
+                continue
+            }
+
+            if line.hasPrefix("- ") {
+                flushParagraph()
+                let bulletText = String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                result.append(
+                    ChatDisplayBlock(
+                        kind: .bullet,
+                        plainText: bulletText,
+                        attributedText: makeInlineMarkdown(bulletText, enabled: enableInlineMarkdown),
+                        tableData: nil
+                    )
+                )
+            } else {
+                paragraphBuffer.append(rawLine)
+            }
+
+            index += 1
+        }
+
+        flushParagraph()
+
+        if result.isEmpty {
+            return [
+                ChatDisplayBlock(
+                    kind: .paragraph,
+                    plainText: normalizedText,
+                    attributedText: makeInlineMarkdown(normalizedText, enabled: enableInlineMarkdown),
+                    tableData: nil
+                )
+            ]
+        }
+
+        return result
+    }
+
+    private func makeInlineMarkdown(_ text: String, enabled: Bool) -> AttributedString? {
+        guard enabled else { return nil }
+        return try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(
+                allowsExtendedAttributes: false, interpretedSyntax: .inlineOnlyPreservingWhitespace,
+                failurePolicy: .returnPartiallyParsedIfPossible,
+                languageCode: nil
+            )
+        )
     }
 }
