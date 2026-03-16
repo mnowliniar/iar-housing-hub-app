@@ -30,9 +30,15 @@ enum ChatDisplayBlockKind: Equatable {
     case table
 }
 
+
 struct ChatTableData: Equatable {
     let headers: [String]
     let rows: [[String]]
+}
+
+struct ChatRelatedLink: Equatable {
+    let title: String
+    let urlString: String
 }
 
 struct ChatDisplayBlock: Identifiable, Equatable {
@@ -41,6 +47,7 @@ struct ChatDisplayBlock: Identifiable, Equatable {
     let plainText: String
     let attributedText: AttributedString?
     let tableData: ChatTableData?
+    let relatedLinks: [ChatRelatedLink]?
 }
 
 struct BackendChatMessage: Decodable {
@@ -180,5 +187,21 @@ struct ChatMessage: Identifiable, Equatable {
         self.isEphemeral = isEphemeral
         self.chartSpecJSON = chartSpecJSON
         self.displayBlocks = displayBlocks
+    }
+}
+
+struct ChatSummary: Identifiable, Decodable, Equatable {
+    var id: String { threadID }
+
+    let threadID: String
+    let name: String
+    let created: String?
+    let updated: String?
+
+    enum CodingKeys: String, CodingKey {
+        case threadID = "thread_id"
+        case name
+        case created
+        case updated
     }
 }

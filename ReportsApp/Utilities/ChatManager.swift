@@ -18,6 +18,9 @@ final class ChatManager: ObservableObject {
     @Published var statusText: String?
     @Published var statusMessages: [ChatMessage] = []
     @Published var pendingScrollTarget: UUID?
+    @Published var chats: [ChatSummary] = []
+    @Published var isLoadingChats = false
+    @Published var chatListError: String?
     private var lastUserMessageID: UUID?
 
     @AppStorage("currentChatThreadID") private var storedThreadID: String = ""
@@ -31,7 +34,45 @@ final class ChatManager: ObservableObject {
         }
         return storedThreadID
     }
+    func fetchChats(anonymousThreadIDs: [String] = []) async {
+        isLoadingChats = true
+        chatListError = nil
 
+        do {
+            chats = try await listChats(anonymousThreadIDs: anonymousThreadIDs)
+        } catch {
+            chatListError = error.localizedDescription
+        }
+
+        isLoadingChats = false
+    }
+
+    private func listChats(anonymousThreadIDs: [String]) async throws -> [ChatSummary] {
+        let url = URL(string: "\(baseURL)/list_chats/")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode([
+            "filenames": anonymousThreadIDs
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            let message = String(data: data, encoding: .utf8) ?? "Unable to load chats."
+            throw NSError(
+                domain: "ChatManager",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
+        let decoded = try JSONDecoder().decode(ListChatsResponse.self, from: data)
+        return decoded.chats
+    }
+    private struct ListChatsResponse: Decodable {
+        let chats: [ChatSummary]
+    }
     func newChat() {
         pollingTask?.cancel()
         storedThreadID = UUID().uuidString
@@ -266,6 +307,57 @@ final class ChatManager: ObservableObject {
         statusText = nil
     }
 
+    private struct ParsedInternalLink: Hashable {
+        let title: String
+        let href: String
+    }
+
+    private func normalizedInternalURLString(from href: String) -> String {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            return trimmed
+        }
+        if trimmed.hasPrefix("/") {
+            return "\(baseURL)\(trimmed)"
+        }
+        return "\(baseURL)/\(trimmed)"
+    }
+
+    private func extractMarkdownLinks(from text: String) -> [ParsedInternalLink] {
+        let pattern = #"\[([^\]]+)\]\(([^)]+)\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+
+        return matches.compactMap { match in
+            guard match.numberOfRanges == 3 else { return nil }
+            let title = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let href = nsText.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, !href.isEmpty else { return nil }
+            return ParsedInternalLink(title: title, href: normalizedInternalURLString(from: href))
+        }
+    }
+
+    private func expandMarkdownLinksToAbsoluteURLs(in text: String) -> String {
+        let pattern = #"\[([^\]]+)\]\(([^)]+)\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).reversed()
+        var output = text
+
+        for match in matches {
+            guard match.numberOfRanges == 3 else { continue }
+            let title = nsText.substring(with: match.range(at: 1))
+            let href = nsText.substring(with: match.range(at: 2))
+            let replacement = "[\(title)](\(normalizedInternalURLString(from: href)))"
+            if let range = Range(match.range(at: 0), in: output) {
+                output.replaceSubrange(range, with: replacement)
+            }
+        }
+
+        return output
+    }
+
     private func buildDisplayBlocks(
         from text: String,
         enableInlineMarkdown: Bool,
@@ -275,18 +367,26 @@ final class ChatManager: ObservableObject {
             .replacingOccurrences(of: "\\n", with: "\n")
             .replacingOccurrences(of: "\r\n", with: "\n")
 
+        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: normalizedText) : normalizedText
+
         guard preserveStructure else {
             return [
                 ChatDisplayBlock(
                     kind: .paragraph,
-                    plainText: normalizedText,
-                    attributedText: makeInlineMarkdown(normalizedText, enabled: enableInlineMarkdown),
-                    tableData: nil
+                    plainText: expandedText,
+                    attributedText: makeInlineMarkdown(expandedText, enabled: enableInlineMarkdown),
+                    tableData: nil,
+                    relatedLinks: extractMarkdownLinks(from: expandedText).map {
+                        ChatRelatedLink(
+                            title: $0.title,
+                            urlString: $0.href
+                        )
+                    }
                 )
             ]
         }
 
-        let lines = normalizedText.components(separatedBy: "\n")
+        let lines = expandedText.components(separatedBy: "\n")
 
         func isTableSeparator(_ line: String) -> Bool {
             let trimmed = line.replacingOccurrences(of: " ", with: "")
@@ -304,12 +404,19 @@ final class ChatManager: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !paragraph.isEmpty {
+                let relatedLinks = extractMarkdownLinks(from: paragraph)
                 result.append(
                     ChatDisplayBlock(
                         kind: .paragraph,
                         plainText: paragraph,
                         attributedText: makeInlineMarkdown(paragraph, enabled: enableInlineMarkdown),
-                        tableData: nil
+                        tableData: nil,
+                        relatedLinks: relatedLinks.map {
+                            ChatRelatedLink(
+                                title: $0.title,
+                                urlString: $0.href
+                            )
+                        }
                     )
                 )
             }
@@ -359,7 +466,8 @@ final class ChatManager: ObservableObject {
                             kind: .table,
                             plainText: "",
                             attributedText: nil,
-                            tableData: ChatTableData(headers: headers, rows: rows)
+                            tableData: ChatTableData(headers: headers, rows: rows),
+                            relatedLinks: nil
                         )
                     )
                 }
@@ -376,7 +484,13 @@ final class ChatManager: ObservableObject {
                         kind: .bullet,
                         plainText: bulletText,
                         attributedText: makeInlineMarkdown(bulletText, enabled: enableInlineMarkdown),
-                        tableData: nil
+                        tableData: nil,
+                        relatedLinks: extractMarkdownLinks(from: bulletText).map {
+                            ChatRelatedLink(
+                                title: $0.title,
+                                urlString: $0.href
+                            )
+                        }
                     )
                 )
             } else {
@@ -392,9 +506,15 @@ final class ChatManager: ObservableObject {
             return [
                 ChatDisplayBlock(
                     kind: .paragraph,
-                    plainText: normalizedText,
-                    attributedText: makeInlineMarkdown(normalizedText, enabled: enableInlineMarkdown),
-                    tableData: nil
+                    plainText: expandedText,
+                    attributedText: makeInlineMarkdown(expandedText, enabled: enableInlineMarkdown),
+                    tableData: nil,
+                    relatedLinks: extractMarkdownLinks(from: expandedText).map {
+                        ChatRelatedLink(
+                            title: $0.title,
+                            urlString: $0.href
+                        )
+                    }
                 )
             ]
         }

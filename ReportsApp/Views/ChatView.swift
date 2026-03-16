@@ -137,7 +137,7 @@ struct ChatView: View {
             }
             .padding()
         }
-        .navigationTitle("AI Chat")
+        .navigationTitle("Spark")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $activeGutsContent) { item in
             NavigationStack {
@@ -248,6 +248,135 @@ private struct ChartShareItem: Identifiable {
     let image: UIImage
 }
 
+private enum ChartExportLayout: String, CaseIterable, Identifiable {
+    case post
+    case square
+    case story
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .post:
+            return "Post"
+        case .square:
+            return "Square"
+        case .story:
+            return "Story"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .post:
+            return "rectangle.portrait"
+        case .square:
+            return "square"
+        case .story:
+            return "rectangle"
+        }
+    }
+
+    var size: CGSize {
+        switch self {
+        case .post:
+            return CGSize(width: 1080, height: 1350)
+        case .square:
+            return CGSize(width: 1080, height: 1080)
+        case .story:
+            return CGSize(width: 1080, height: 1920)
+        }
+    }
+
+    var horizontalPadding: CGFloat {
+        switch self {
+        case .post:
+            return 56
+        case .square:
+            return 48
+        case .story:
+            return 56
+        }
+    }
+
+    var topPadding: CGFloat {
+        switch self {
+        case .post:
+            return 52
+        case .square:
+            return 48
+        case .story:
+            return 64
+        }
+    }
+
+    var bottomPadding: CGFloat {
+        switch self {
+        case .post:
+            return 40
+        case .square:
+            return 40
+        case .story:
+            return 48
+        }
+    }
+
+    var chartTopPadding: CGFloat {
+        switch self {
+        case .post:
+            return 80
+        case .square:
+            return 64
+        case .story:
+            return 92
+        }
+    }
+
+    var chartHeightRatio: CGFloat {
+        switch self {
+        case .post:
+            return 0.56
+        case .square:
+            return 0.50
+        case .story:
+            return 0.48
+        }
+    }
+
+    var titleFontSize: CGFloat {
+        switch self {
+        case .post:
+            return 58
+        case .square:
+            return 52
+        case .story:
+            return 60
+        }
+    }
+
+    var subtitleFontSize: CGFloat {
+        switch self {
+        case .post:
+            return 30
+        case .square:
+            return 28
+        case .story:
+            return 30
+        }
+    }
+
+    var footerFontSize: CGFloat {
+        switch self {
+        case .post:
+            return 26
+        case .square:
+            return 26
+        case .story:
+            return 26
+        }
+    }
+}
+
 private struct ChartCardView: View {
     let spec: NormalizedChartSpec
     @Environment(\.displayScale) private var displayScale
@@ -259,7 +388,7 @@ private struct ChartCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SparkChartView(spec: spec)
-                .frame(height: 220)
+                .frame(height: 240)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 16) {
@@ -278,15 +407,20 @@ private struct ChartCardView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    if let image = renderInstagramExportImage() {
-                        shareItem = ChartShareItem(image: image)
+                Menu {
+                    ForEach(ChartExportLayout.allCases) { layout in
+                        Button {
+                            if let image = renderExportImage(layout: layout) {
+                                shareItem = ChartShareItem(image: image)
+                            }
+                        } label: {
+                            Label(layout.title, systemImage: layout.systemImage)
+                        }
                     }
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(.caption)
                 }
-                .buttonStyle(.plain)
 
                 Button {
                     showingExpandedChart = true
@@ -332,31 +466,31 @@ private struct ChartCardView: View {
         return renderer.uiImage
     }
 
-    private func renderInstagramExportImage() -> UIImage? {
-        let width: CGFloat = 1080
-        let height: CGFloat = 1350
-        let horizontalPadding: CGFloat = 56
-        let topPadding: CGFloat = 52
-        let bottomPadding: CGFloat = 40
-        let chartTopPadding: CGFloat = 80
-        let chartHeight: CGFloat = 760
+    private func renderExportImage(layout: ChartExportLayout) -> UIImage? {
+        let width = layout.size.width
+        let height = layout.size.height
+        let horizontalPadding = layout.horizontalPadding
+        let topPadding = layout.topPadding
+        let bottomPadding = layout.bottomPadding
+        let chartTopPadding = layout.chartTopPadding
+        let chartHeight = height * layout.chartHeightRatio
 
         let renderer = ImageRenderer(
             content: VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 16) {
                     if let title = spec.title, !title.isEmpty {
                         Text(title)
-                            .font(.system(size: 58, weight: .bold, design: .default))
+                            .font(.system(size: layout.titleFontSize, weight: .bold, design: .default))
                             .foregroundStyle(.primary)
                             .multilineTextAlignment(.leading)
-                            .lineLimit(3)
+                            .lineLimit(layout == .story ? 4 : 3)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let subtitle = spec.subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 30, weight: .regular, design: .default))
+                            .font(.system(size: layout.subtitleFontSize, weight: .regular, design: .default))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -374,42 +508,13 @@ private struct ChartCardView: View {
                 Spacer(minLength: 0)
 
                 Text("Source: Indiana Association of REALTORS® | Housing Hub")
-                    .font(.system(size: 18, weight: .regular, design: .default))
+                    .font(.system(size: layout.footerFontSize, weight: .regular, design: .default))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, horizontalPadding)
                     .padding(.bottom, bottomPadding)
             }
             .frame(width: width, height: height, alignment: .topLeading)
-            .background(Color(.systemBackground))
-        )
-        renderer.scale = displayScale
-        return renderer.uiImage
-    }
-
-    private func renderExportImage(size: CGFloat) -> UIImage? {
-        let renderer = ImageRenderer(
-            content: VStack(alignment: .leading, spacing: 16) {
-                if let title = spec.title, !title.isEmpty {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if let subtitle = spec.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                SparkChartView(spec: spec)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: size * 0.58)
-            }
-            .padding(40)
-            .frame(width: size, height: size, alignment: .topLeading)
             .background(Color(.systemBackground))
         )
         renderer.scale = displayScale
@@ -488,6 +593,11 @@ private struct StatusPanel: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(.secondarySystemBackground))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.bottom, 6)
     }
 }
 
@@ -502,7 +612,8 @@ private struct RichChatText: View {
                 kind: .paragraph,
                 plainText: fallbackText,
                 attributedText: nil,
-                tableData: nil
+                tableData: nil,
+                relatedLinks: []
             )
         ]
 
@@ -510,23 +621,36 @@ private struct RichChatText: View {
             ForEach(resolvedBlocks) { block in
                 switch block.kind {
                 case .paragraph:
-                    InlineMarkdownText(
-                        plainText: block.plainText,
-                        attributedText: block.attributedText,
-                        foregroundStyle: foregroundStyle
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                case .bullet:
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("•")
-                            .foregroundStyle(foregroundStyle)
+                    VStack(alignment: .leading, spacing: 8) {
                         InlineMarkdownText(
                             plainText: block.plainText,
                             attributedText: block.attributedText,
                             foregroundStyle: foregroundStyle
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if let relatedLinks = block.relatedLinks, !relatedLinks.isEmpty {
+                            RelatedLinksView(links: relatedLinks)
+                        }
+                    }
+
+                case .bullet:
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .foregroundStyle(foregroundStyle)
+                            InlineMarkdownText(
+                                plainText: block.plainText,
+                                attributedText: block.attributedText,
+                                foregroundStyle: foregroundStyle
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if let relatedLinks = block.relatedLinks, !relatedLinks.isEmpty {
+                            RelatedLinksView(links: relatedLinks)
+                                .padding(.leading, 18)
+                        }
                     }
                 case .table:
                     if let table = block.tableData {
@@ -535,6 +659,135 @@ private struct RichChatText: View {
                 }
             }
         }
+    }
+}
+
+private enum RelatedLinkKind {
+    case chart
+    case report
+    case link
+
+    init(urlString: String) {
+        let lower = urlString.lowercased()
+        if lower.contains("reports/viz/") {
+            self = .chart
+        } else if lower.contains("reports/viewreport") {
+            self = .report
+        } else {
+            self = .link
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .chart:
+            return "Chart"
+        case .report:
+            return "Report"
+        case .link:
+            return "Link"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .chart:
+            return "chart.xyaxis.line"
+        case .report:
+            return "doc.text"
+        case .link:
+            return "link"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .chart:
+            return BrandColors.teal
+        case .report:
+            return Color(hex: "#433277")
+        case .link:
+            return Color(hex: "#e77c05")
+        }
+    }
+}
+
+private struct RelatedLinksView: View {
+    let links: [ChatRelatedLink]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(links.enumerated()), id: \.offset) { _, link in
+                if let url = URL(string: link.urlString) {
+                    Link(destination: url) {
+                        RelatedLinkCard(link: link)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}
+
+private struct RelatedLinkCard: View {
+    let link: ChatRelatedLink
+
+    private var kind: RelatedLinkKind {
+        RelatedLinkKind(urlString: link.urlString)
+    }
+
+    private var hostLabel: String {
+        URL(string: link.urlString)?.host ?? "data.indianarealtors.com"
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(kind.tint.opacity(0.12))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: kind.systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(kind.tint)
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(link.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 6) {
+                    Text(kind.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(kind.tint)
+
+                    Text("•")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+
+                    Text(hostLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Image(systemName: "arrow.up.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.tertiarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -911,154 +1164,283 @@ private struct SparkChartView: View {
     let spec: NormalizedChartSpec
     var showsHeader: Bool = true
     var isExportStyle: Bool = false
-    
+
+    private enum AxisLabelKind {
+        case categorical
+        case monthly
+        case weekly
+    }
+
+    private func axisLabelKind(for labels: [String]) -> AxisLabelKind {
+        if let subtitle = spec.subtitle?.lowercased(), subtitle.contains("week") {
+            return .weekly
+        }
+
+        guard let sample = labels.first?.lowercased() else { return .categorical }
+
+        if sample.contains("week of") {
+            return .weekly
+        }
+
+        let monthTokens = [
+            "jan", "feb", "mar", "apr", "may", "jun",
+            "jul", "aug", "sep", "sept", "oct", "nov", "dec"
+        ]
+
+        if monthTokens.contains(where: { sample.contains($0) }) {
+            return .monthly
+        }
+
+        return .categorical
+    }
+
+    private func periodicAnchorLabels(from labels: [String], every period: Int) -> [String] {
+        guard !labels.isEmpty else { return [] }
+        guard period > 0 else { return labels }
+
+        var output: [String] = []
+        var index = 0
+        while index < labels.count {
+            output.append(labels[index])
+            index += period
+        }
+
+        return output
+    }
+
     private func visibleXAxisLabels() -> [String] {
         guard let labels = spec.series.first?.points.map(\.xLabel), !labels.isEmpty else { return [] }
 
-        let maxVisibleLabels = isExportStyle ? 4 : 5
-        if labels.count <= maxVisibleLabels {
+        let kind = axisLabelKind(for: labels)
+
+        switch kind {
+        case .categorical:
             return labels
-        }
 
-        let desiredIntervals = max(1, maxVisibleLabels - 1)
-        let step = max(1, Int(ceil(Double(labels.count - 1) / Double(desiredIntervals))))
-
-        var chosenIndices: [Int] = []
-        var index = 0
-        while index < labels.count {
-            chosenIndices.append(index)
-            index += step
-        }
-
-        if chosenIndices.first != 0 {
-            chosenIndices.insert(0, at: 0)
-        }
-
-        let lastIndex = labels.count - 1
-        if let currentLast = chosenIndices.last {
-            if currentLast != lastIndex {
-                // If the last chosen tick is too close to the real final label,
-                // replace it instead of crowding both.
-                if lastIndex - currentLast < step {
-                    chosenIndices[chosenIndices.count - 1] = lastIndex
-                } else {
-                    chosenIndices.append(lastIndex)
-                }
+        case .monthly:
+            if labels.count < 6 {
+                return labels
+            } else if labels.count < 18 {
+                return periodicAnchorLabels(from: labels, every: 3)
+            } else {
+                return periodicAnchorLabels(from: labels, every: 12)
             }
-        } else {
-            chosenIndices = [0, lastIndex]
+
+        case .weekly:
+            if labels.count < 104 {
+                if labels.count <= 2 {
+                    return labels
+                }
+                return [labels.first!, labels.last!]
+            } else {
+                return periodicAnchorLabels(from: labels, every: 52)
+            }
+        }
+    }
+
+    private var isLongMonthlySeries: Bool {
+        guard let labels = spec.series.first?.points.map(\.xLabel), !labels.isEmpty else { return false }
+        return axisLabelKind(for: labels) == .monthly && labels.count >= 18
+    }
+
+    private func compactXAxisLabel(_ label: String, visibleLabels: [String]) -> String {
+        guard isLongMonthlySeries else { return label }
+
+        let monthTokens = [
+            "jan", "feb", "mar", "apr", "may", "jun",
+            "jul", "aug", "sep", "sept", "oct", "nov", "dec"
+        ]
+
+        let visibleLower = visibleLabels.map { $0.lowercased() }
+        let sharedMonth = monthTokens.first { token in
+            visibleLower.allSatisfy { $0.contains(token) }
         }
 
-        let uniqueSorted = Array(Set(chosenIndices)).sorted()
-        return uniqueSorted.map { labels[$0] }
+        let parts = label.split(separator: " ")
+        guard let yearPart = parts.last, yearPart.count == 4 else { return label }
+        let year = String(yearPart.suffix(2))
+
+        if sharedMonth != nil {
+            return "’\(year)"
+        }
+
+        if let month = parts.first {
+            return "\(month) ’\(year)"
+        }
+
+        return label
+    }
+
+    private var chartEndPadding: CGFloat {
+        if isExportStyle, visibleXAxisLabels().count > 2 {
+            return 84
+        }
+        return isExportStyle ? 40 : 12
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if showsHeader, let title = spec.title, !title.isEmpty {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-            }
-
-            if showsHeader, let subtitle = spec.subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Chart {
+            chartHeader
+            chartLegendView
+            chartContent
+        }
+    }
+    @ViewBuilder
+    private var chartLegendView: some View {
+        if spec.series.count > 1 {
+            HStack(spacing: isExportStyle ? 20 : 14) {
                 ForEach(spec.series) { series in
-                    if spec.chartType == .line, series.fill {
-                        ForEach(series.points) { point in
-                            AreaMark(
-                                x: .value("Label", point.xLabel),
-                                y: .value(series.label, point.yValue)
-                            )
-                            .foregroundStyle(series.fillColor)
-                        }
-                    }
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(series.color)
+                            .frame(width: isExportStyle ? 16 : 10, height: isExportStyle ? 16 : 10)
 
-                    ForEach(series.points) { point in
-                        switch spec.chartType {
-                        case .line:
-                            LineMark(
-                                x: .value("Label", point.xLabel),
-                                y: .value(series.label, point.yValue)
-                            )
-                            .foregroundStyle(series.color)
-                            .lineStyle(
-                                StrokeStyle(
-                                    lineWidth: isExportStyle ? max(series.lineWidth, 10) : series.lineWidth,
-                                    lineCap: .round,
-                                    lineJoin: .round
-                                )
-                            )
-
-                        case .bar:
-                            BarMark(
-                                x: .value("Label", point.xLabel),
-                                y: .value(series.label, point.yValue)
-                            )
-                            .foregroundStyle(series.color)
-                        }
-                    }
-
-                    if spec.chartType == .line, let first = series.points.first {
-                        PointMark(
-                            x: .value("Label", first.xLabel),
-                            y: .value(series.label, first.yValue)
-                        )
-                        .foregroundStyle(series.color)
-                        .symbolSize(isExportStyle ? 160 : 85)
-                    }
-
-                    if spec.chartType == .line,
-                       let last = series.points.last,
-                       last.id != series.points.first?.id {
-                        PointMark(
-                            x: .value("Label", last.xLabel),
-                            y: .value(series.label, last.yValue)
-                        )
-                        .foregroundStyle(series.color)
-                        .symbolSize(isExportStyle ? 160 : 85)
+                        Text(series.label)
+                            .font(isExportStyle ? .system(size: 26, weight: .semibold) : .caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-            .chartXAxis {
-                AxisMarks(values: visibleXAxisLabels()) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.primary.opacity(0.08))
+            .padding(.bottom, isExportStyle ? 14 : 0)
+        }
+    }
 
-                    AxisTick()
-                        .foregroundStyle(Color.primary.opacity(0.12))
+    @ViewBuilder
+    private var chartHeader: some View {
+        if showsHeader, let title = spec.title, !title.isEmpty {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+        }
 
+        if showsHeader, let subtitle = spec.subtitle, !subtitle.isEmpty {
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var chartContent: some View {
+        Chart {
+            ForEach(spec.series) { series in
+                seriesMarks(for: series)
+            }
+        }
+        .chartXAxis { xAxisMarks }
+        .chartXScale(range: .plotDimension(startPadding: isExportStyle ? 40 : 12, endPadding: chartEndPadding))
+        .chartYAxis { yAxisMarks }
+        .chartLegend(.hidden)
+    }
+
+    @ChartContentBuilder
+    private func seriesMarks(for series: NormalizedSeries) -> some ChartContent {
+        if spec.chartType == .line, series.fill {
+            ForEach(series.points) { point in
+                AreaMark(
+                    x: .value("Label", point.xLabel),
+                    y: .value("Value", point.yValue),
+                    series: .value("Series", series.label)
+                )
+                .foregroundStyle(series.fillColor)
+            }
+        }
+
+        ForEach(series.points) { point in
+            primaryMark(for: point, in: series)
+        }
+
+        if spec.chartType == .line, let first = series.points.first {
+            PointMark(
+                x: .value("Label", first.xLabel),
+                y: .value("Value", first.yValue)
+            )
+            .foregroundStyle(series.color)
+            .symbolSize(isExportStyle ? 160 : 85)
+        }
+
+        if spec.chartType == .line,
+           let last = series.points.last,
+           last.id != series.points.first?.id {
+            PointMark(
+                x: .value("Label", last.xLabel),
+                y: .value("Value", last.yValue)
+            )
+            .foregroundStyle(series.color)
+            .symbolSize(isExportStyle ? 160 : 85)
+        }
+    }
+
+    @ChartContentBuilder
+    private func primaryMark(for point: ChartPoint, in series: NormalizedSeries) -> some ChartContent {
+        switch spec.chartType {
+        case .line:
+            LineMark(
+                x: .value("Label", point.xLabel),
+                y: .value("Value", point.yValue),
+                series: .value("Series", series.label)
+            )
+            .foregroundStyle(series.color)
+            .lineStyle(
+                StrokeStyle(
+                    lineWidth: isExportStyle ? max(series.lineWidth, 10) : series.lineWidth,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+
+        case .bar:
+            BarMark(
+                x: .value("Label", point.xLabel),
+                y: .value("Value", point.yValue)
+            )
+            .foregroundStyle(series.color)
+        }
+    }
+
+    private var xAxisMarks: some AxisContent {
+        let visible = visibleXAxisLabels()
+        let lastVisible = visible.last
+        let shouldLeftAnchorLast = visible.count > 2 && !isLongMonthlySeries
+
+        return AxisMarks(values: visible) { value in
+            AxisGridLine()
+                .foregroundStyle(Color.primary.opacity(isExportStyle ? 0.30 : 0.20))
+
+            AxisTick()
+                .foregroundStyle(Color.primary.opacity(0.12))
+
+            if let label = value.as(String.self) {
+                if shouldLeftAnchorLast, label == lastVisible {
+                    AxisValueLabel(anchor: .topLeading) {
+                        Text(compactXAxisLabel(label, visibleLabels: visible))
+                            .font(isExportStyle ? .system(size: 28, weight: .medium) : .caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                } else {
                     AxisValueLabel(centered: false) {
-                        if let label = value.as(String.self) {
-                            Text(label)
-                                .font(isExportStyle ? .system(size: 28, weight: .medium) : .caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize()
-                        }
+                        Text(compactXAxisLabel(label, visibleLabels: visible))
+                            .font(isExportStyle ? .system(size: 28, weight: .medium) : .caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                 }
             }
-            .chartXScale(range: .plotDimension(startPadding: 40, endPadding: 40))
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine()
-                        .foregroundStyle(Color.primary.opacity(0.08))
-                    AxisTick()
-                        .foregroundStyle(Color.primary.opacity(0.12))
-                    AxisValueLabel() {
-                        if let number = value.as(Double.self) {
-                            Text(number.formatted())
-                                .font(isExportStyle ? .system(size: 28, weight: .medium) : .caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+        }
+    }
+
+    private var yAxisMarks: some AxisContent {
+        AxisMarks(position: .leading) { value in
+            AxisGridLine()
+                .foregroundStyle(Color.primary.opacity(isExportStyle ? 0.30 : 0.20))
+            AxisTick()
+                .foregroundStyle(Color.primary.opacity(0.12))
+            AxisValueLabel() {
+                if let number = value.as(Double.self) {
+                    Text(number.formatted())
+                        .font(isExportStyle ? .system(size: 28, weight: .medium) : .caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .chartLegend(spec.series.count > 1 ? .visible : .hidden)
         }
     }
 }
