@@ -105,12 +105,22 @@ final class ChatManager: ObservableObject {
             isSending = false
             pendingScrollTarget = lastUserMessageID
         } catch {
+            print("[Chat] send(prompt:) failed:", error)
+
+            let messageText: String
+            if let decodingError = error as? DecodingError {
+                messageText = "Something went wrong reading the response from Spark.\n\n\(describeDecodingError(decodingError))"
+            } else {
+                messageText = "Something went wrong sending your message.\n\n\(error.localizedDescription)"
+            }
+
             removeEphemeralMessages()
             messages.append(
                 ChatMessage(
                     sender: .system,
-                    text: "Something went wrong sending your message.",
-                    payloadType: .error
+                    text: messageText,
+                    payloadType: .error,
+                    displayBlocks: buildDisplayBlocks(from: messageText, enableInlineMarkdown: false, preserveStructure: false)
                 )
             )
             resetStatusState()
@@ -152,7 +162,15 @@ final class ChatManager: ObservableObject {
             URLQueryItem(name: "unique_id", value: uniqueID),
             URLQueryItem(name: "thread_id", value: threadID)
         ]
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+
+        if let http = response as? HTTPURLResponse {
+            print("[Chat] executeSQL status:", http.statusCode)
+        }
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[Chat] executeSQL raw response:", raw)
+        }
+
         return try JSONDecoder().decode(ExecuteSQLResponse.self, from: data)
     }
 
@@ -394,5 +412,19 @@ final class ChatManager: ObservableObject {
                 languageCode: nil
             )
         )
+    }
+    private func describeDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .typeMismatch(let type, let context):
+            return "Spark returned a value of the wrong type for \(type).\n\(context.debugDescription)"
+        case .valueNotFound(let type, let context):
+            return "Spark left out a required value for \(type).\n\(context.debugDescription)"
+        case .keyNotFound(let key, let context):
+            return "Spark left out the field '\(key.stringValue)'.\n\(context.debugDescription)"
+        case .dataCorrupted(let context):
+            return "Spark returned data in a format the app could not read.\n\(context.debugDescription)"
+        @unknown default:
+            return error.localizedDescription
+        }
     }
 }
