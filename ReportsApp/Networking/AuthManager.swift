@@ -68,6 +68,15 @@ final class AuthManager: ObservableObject {
             return
         }
 
+        let chatUserID = components.queryItems?.first(where: { $0.name == "chat_user_id" })?.value
+
+        if let chatUserID {
+            UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
+            print("[Auth] chat_user_id received:", chatUserID)
+        } else {
+            print("[Auth] chat_user_id missing in callback")
+        }
+
         Task {
             await exchangeCode(code)
         }

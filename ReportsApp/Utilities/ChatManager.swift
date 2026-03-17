@@ -48,15 +48,50 @@ final class ChatManager: ObservableObject {
     }
 
     private func listChats(anonymousThreadIDs: [String]) async throws -> [ChatSummary] {
+        struct ListChatsRequest: Encodable {
+            let filenames: [String]
+            let chat_user_id: String?
+        }
+
         let url = URL(string: "\(baseURL)/list_chats/")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode([
-            "filenames": anonymousThreadIDs
-        ])
+
+        let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id")
+        print("[Chat] listChats chat_user_id from defaults:", chatUserID ?? "nil")
+
+        let payload = ListChatsRequest(
+            filenames: anonymousThreadIDs,
+            chat_user_id: chatUserID
+        )
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        print("[Chat] listChats URL:", url.absoluteString)
+        print("[Chat] listChats request headers:", request.allHTTPHeaderFields ?? [:])
+        print("[Chat] listChats anonymousThreadIDs:", anonymousThreadIDs)
+
+        let sharedCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
+        if sharedCookies.isEmpty {
+            print("[Chat] listChats shared cookies: none")
+        } else {
+            print("[Chat] listChats shared cookies:")
+            for cookie in sharedCookies {
+                print("- \(cookie.name)=\(cookie.value); domain=\(cookie.domain); path=\(cookie.path)")
+            }
+            let cookieHeader = HTTPCookie.requestHeaderFields(with: sharedCookies)
+            print("[Chat] listChats computed cookie header:", cookieHeader)
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let http = response as? HTTPURLResponse {
+            print("[Chat] listChats status:", http.statusCode)
+            print("[Chat] listChats response headers:", http.allHeaderFields)
+        }
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[Chat] listChats raw response:", raw)
+        }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             let message = String(data: data, encoding: .utf8) ?? "Unable to load chats."
@@ -72,6 +107,226 @@ final class ChatManager: ObservableObject {
     }
     private struct ListChatsResponse: Decodable {
         let chats: [ChatSummary]
+    }
+
+    func loadChat(threadID: String) async {
+        do {
+            let loaded = try await fetchChat(threadID: threadID)
+            pollingTask?.cancel()
+            storedThreadID = threadID
+            messages = loaded.messages
+            conversationName = loaded.name
+            inputText = ""
+            pendingScrollTarget = messages.last?.id
+            lastUserMessageID = messages.last(where: { $0.sender == .user })?.id
+            resetStatusState()
+        } catch {
+            print("[Chat] loadChat failed:", error)
+        }
+    }
+    func deleteChat(threadID: String) async {
+        do {
+            try await performDeleteChat(threadID: threadID)
+            chats.removeAll { $0.id == threadID }
+
+            if storedThreadID == threadID {
+                newChat()
+            }
+        } catch {
+            print("[Chat] deleteChat failed:", error)
+        }
+    }
+
+    private func performDeleteChat(threadID: String) async throws {
+        var components = URLComponents(string: "\(baseURL)/delete_chat/")!
+        var queryItems = [URLQueryItem(name: "thread_id", value: threadID)]
+
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            queryItems.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
+        }
+
+        components.queryItems = queryItems
+        let url = components.url!
+
+        print("[Chat] deleteChat URL:", url.absoluteString)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let http = response as? HTTPURLResponse {
+            print("[Chat] deleteChat status:", http.statusCode)
+        }
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[Chat] deleteChat raw response:", raw)
+        }
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            let message = String(data: data, encoding: .utf8) ?? "Unable to delete chat."
+            throw NSError(
+                domain: "ChatManager",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+    }
+    private func fetchChat(threadID: String) async throws -> LoadedChat {
+        var components = URLComponents(string: "\(baseURL)/load_chat/")!
+        var queryItems = [URLQueryItem(name: "thread_id", value: threadID)]
+
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            queryItems.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
+        }
+
+        components.queryItems = queryItems
+        let url = components.url!
+
+        print("[Chat] loadChat URL:", url.absoluteString)
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        if let http = response as? HTTPURLResponse {
+            print("[Chat] loadChat status:", http.statusCode)
+        }
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[Chat] loadChat raw response:", raw)
+        }
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            let message = String(data: data, encoding: .utf8) ?? "Unable to load chat."
+            throw NSError(
+                domain: "ChatManager",
+                code: http.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+
+        return try parseLoadedChat(from: data)
+    }
+
+    private struct LoadedChat {
+        let name: String?
+        let messages: [ChatMessage]
+    }
+
+    private func parseLoadedChat(from data: Data) throws -> LoadedChat {
+        let json = try JSONSerialization.jsonObject(with: data)
+        guard let dict = json as? [String: Any] else {
+            throw NSError(
+                domain: "ChatManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Loaded chat was not a JSON object."]
+            )
+        }
+
+        let name = dict["name"] as? String
+        let messageObjects = dict["messages"] as? [[String: Any]] ?? []
+        let loadedMessages = messageObjects.flatMap { parseLoadedMessages(from: $0) }
+        return LoadedChat(name: name, messages: loadedMessages)
+    }
+    private func parseLoadedMessages(from dict: [String: Any]) -> [ChatMessage] {
+        let roleRaw = (dict["role"] as? String)?.lowercased() ?? "assistant"
+
+        let sender: ChatSender
+        switch roleRaw {
+        case "user":
+            sender = .user
+        case "system":
+            sender = .system
+        default:
+            sender = .assistant
+        }
+
+        let content = (dict["content"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !content.isEmpty else { return [] }
+
+        guard sender == .assistant else {
+            return [
+                ChatMessage(
+                    sender: sender,
+                    text: content,
+                    payloadType: nil,
+                    displayBlocks: buildDisplayBlocks(
+                        from: content,
+                        enableInlineMarkdown: false,
+                        preserveStructure: false
+                    )
+                )
+            ]
+        }
+
+        let segments = splitAssistantContentIntoSegments(content)
+        return segments.compactMap { segment in
+            switch segment {
+            case .text(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return ChatMessage(
+                    sender: .assistant,
+                    text: trimmed,
+                    payloadType: nil,
+                    displayBlocks: buildDisplayBlocks(
+                        from: trimmed,
+                        enableInlineMarkdown: true,
+                        preserveStructure: true
+                    )
+                )
+            case .chart(let json):
+                let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return ChatMessage(
+                    sender: .assistant,
+                    text: "",
+                    payloadType: .chart,
+                    chartSpecJSON: normalizeLoadedChartJSON(trimmed)
+                )
+            }
+        }
+    }
+
+    private enum LoadedAssistantSegment {
+        case text(String)
+        case chart(String)
+    }
+
+    private func splitAssistantContentIntoSegments(_ content: String) -> [LoadedAssistantSegment] {
+        let marker = "```chart"
+        var remaining = content[...]
+        var segments: [LoadedAssistantSegment] = []
+
+        while let startRange = remaining.range(of: marker) {
+            let before = String(remaining[..<startRange.lowerBound])
+            if !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                segments.append(.text(before))
+            }
+
+            let chartStart = startRange.upperBound
+            let afterMarker = remaining[chartStart...]
+
+            guard let endRange = afterMarker.range(of: "```") else {
+                let fallback = String(remaining[startRange.lowerBound...])
+                if !fallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    segments.append(.text(fallback))
+                }
+                remaining = ""[...]
+                break
+            }
+
+            let chartBody = String(afterMarker[..<endRange.lowerBound])
+            if !chartBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                segments.append(.chart(chartBody))
+            }
+
+            remaining = afterMarker[endRange.upperBound...]
+        }
+
+        let tail = String(remaining)
+        if !tail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            segments.append(.text(tail))
+        }
+
+        return segments
     }
     func newChat() {
         pollingTask?.cancel()
@@ -141,7 +396,7 @@ final class ChatManager: ObservableObject {
             } else {
                 removeEphemeralMessages()
             }
-
+            upsertCurrentChatSummary()
             resetStatusState()
             isSending = false
             pendingScrollTarget = lastUserMessageID
@@ -169,7 +424,40 @@ final class ChatManager: ObservableObject {
             pendingScrollTarget = lastUserMessageID
         }
     }
+    private func upsertCurrentChatSummary() {
+        let now = isoTimestampNow()
+        let currentThreadID = threadID
+        let trimmedName = conversationName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = (trimmedName?.isEmpty == false) ? trimmedName! : "Untitled"
 
+        if let index = chats.firstIndex(where: { $0.id == currentThreadID }) {
+            let existing = chats[index]
+            chats.remove(at: index)
+            chats.insert(
+                ChatSummary(
+                    threadID: existing.id,
+                    name: title,
+                    created: existing.created ?? now,
+                    updated: now
+                ),
+                at: 0
+            )
+        } else {
+            chats.insert(
+                ChatSummary(
+                    threadID: currentThreadID,
+                    name: title,
+                    created: now,
+                    updated: now
+                ),
+                at: 0
+            )
+        }
+    }
+
+    private func isoTimestampNow() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
     private func generateUniqueID() async throws -> String {
         let url = URL(string: "\(baseURL)/generate_unique_id")!
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -183,12 +471,29 @@ final class ChatManager: ObservableObject {
         threadID: String
     ) async throws -> HandleUserQueryResponse {
         var components = URLComponents(string: "\(baseURL)/handle_user_query")!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "prompt", value: prompt),
             URLQueryItem(name: "unique_id", value: uniqueID),
             URLQueryItem(name: "thread_id", value: threadID)
         ]
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
+
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            queryItems.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
+        }
+
+        components.queryItems = queryItems
+        let url = components.url!
+        print("[Chat] handleUserQuery URL:", url.absoluteString)
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        if let http = response as? HTTPURLResponse {
+            print("[Chat] handleUserQuery status:", http.statusCode)
+        }
+        if let raw = String(data: data, encoding: .utf8) {
+            print("[Chat] handleUserQuery raw response:", raw)
+        }
+
         return try JSONDecoder().decode(HandleUserQueryResponse.self, from: data)
     }
 
@@ -198,12 +503,21 @@ final class ChatManager: ObservableObject {
         threadID: String
     ) async throws -> ExecuteSQLResponse {
         var components = URLComponents(string: "\(baseURL)/execute_sql")!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "filename", value: filename),
             URLQueryItem(name: "unique_id", value: uniqueID),
             URLQueryItem(name: "thread_id", value: threadID)
         ]
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            queryItems.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
+        }
+
+        components.queryItems = queryItems
+        let url = components.url!
+        print("[Chat] executeSQL URL:", url.absoluteString)
+
+        let (data, response) = try await URLSession.shared.data(from: url)
 
         if let http = response as? HTTPURLResponse {
             print("[Chat] executeSQL status:", http.statusCode)
@@ -548,3 +862,10 @@ final class ChatManager: ObservableObject {
         }
     }
 }
+
+    private func normalizeLoadedChartJSON(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\\"", with: "\"")
+            .replacingOccurrences(of: "\\t", with: "\t")
+    }

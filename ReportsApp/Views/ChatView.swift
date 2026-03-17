@@ -15,6 +15,7 @@ struct ChatView: View {
     @StateObject private var chat = ChatManager()
     @FocusState private var inputFocused: Bool
     @State private var activeGutsContent: GutsModalContent?
+    @State private var showingChatList = false
 
     private func associatedGutsText(for index: Int) -> String? {
         guard chat.messages.indices.contains(index) else { return nil }
@@ -55,6 +56,15 @@ struct ChatView: View {
                 Text(chat.conversationName ?? "Chat")
                     .font(.headline)
                 Spacer()
+
+                Button {
+                    showingChatList = true
+                } label: {
+                    Label("Chats", systemImage: "bubble.left.and.bubble.right")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+
                 Button("New") {
                     chat.newChat()
                 }
@@ -155,6 +165,16 @@ struct ChatView: View {
                     }
             }
         }
+        .sheet(isPresented: $showingChatList) {
+            NavigationStack {
+                ChatListSheet(chatManager: chat) { item in
+                    showingChatList = false
+                    Task {
+                        await chat.loadChat(threadID: item.id)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -197,9 +217,9 @@ private struct ChatBubble: View {
             EmptyView()
 
         case .chart:
-            if let json = message.chartSpecJSON,
-               let data = json.data(using: .utf8),
-               let aiSpec = try? JSONDecoder().decode(AIChartSpec.self, from: data) {
+            if let json = debugChartJSON(message.chartSpecJSON),
+               let data = debugChartData(from: json),
+               let aiSpec = debugDecodedChartSpec(from: data) {
                 ChartCardView(spec: ChartNormalizer.build(from: aiSpec))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -213,6 +233,35 @@ private struct ChatBubble: View {
                 foregroundStyle: isUser ? .white : (isSystem ? .secondary : .primary)
             )
             .multilineTextAlignment(.leading)
+        }
+    }
+
+    private func debugChartJSON(_ json: String?) -> String? {
+        if let json {
+            print("[Chart] message.chartSpecJSON:")
+            print(json)
+            return json
+        }
+
+        print("[Chart] chartSpecJSON is nil")
+        return nil
+    }
+
+    private func debugChartData(from json: String) -> Data? {
+        if let data = json.data(using: .utf8) {
+            return data
+        }
+
+        print("[Chart] could not convert spec to utf8 data")
+        return nil
+    }
+
+    private func debugDecodedChartSpec(from data: Data) -> AIChartSpec? {
+        do {
+            return try JSONDecoder().decode(AIChartSpec.self, from: data)
+        } catch {
+            print("[Chart] decode failed:", error)
+            return nil
         }
     }
 
@@ -911,7 +960,7 @@ private struct InlineMarkdownText: View {
     let foregroundStyle: Color
 
     var body: some View {
-        Group {
+        SwiftUI.Group {
             if let attributedText {
                 Text(attributedText)
             } else {
@@ -1442,5 +1491,171 @@ private struct SparkChartView: View {
                 }
             }
         }
+    }
+}
+private struct ChatListSheet: View {
+    @ObservedObject var chatManager: ChatManager
+    let onSelectChat: (ChatSummary) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        chatListContent
+            .navigationTitle("Chats")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await chatManager.fetchChats() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
+            .task {
+                if chatManager.chats.isEmpty {
+                    await chatManager.fetchChats()
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var chatListContent: some View {
+        if chatManager.isLoadingChats && chatManager.chats.isEmpty {
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("Loading chats…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        } else if let error = chatManager.chatListError, chatManager.chats.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+
+                Text("Couldn’t load chats")
+                    .font(.headline)
+
+                Text(error)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                Button("Try Again") {
+                    Task { await chatManager.fetchChats() }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        } else if chatManager.chats.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+
+                Text("No saved chats yet")
+                    .font(.headline)
+
+                Text("Your recent conversations will show up here.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        } else {
+            List {
+                ForEach(chatManager.chats) { item in
+                    Button {
+                        onSelectChat(item)
+                    } label: {
+                        ChatListRow(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task {
+                                await chatManager.deleteChat(threadID: item.id)
+                            }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+        }
+    }
+}
+
+private struct ChatListRow: View {
+    let item: ChatSummary
+
+    private var timestampText: String? {
+        if let updated = item.updated, let date = parseISODate(updated) {
+            return "Updated " + formattedDisplay(for: date)
+        }
+
+        if let created = item.created, let date = parseISODate(created) {
+            return "Created " + formattedDisplay(for: date)
+        }
+
+        return nil
+    }
+
+    private func parseISODate(_ value: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: value) {
+            return date
+        }
+
+        let fallback = ISO8601DateFormatter()
+        fallback.formatOptions = [.withInternetDateTime]
+        return fallback.date(from: value)
+    }
+
+    private func formattedDisplay(for date: Date) -> String {
+        let now = Date()
+        let seconds = now.timeIntervalSince(date)
+
+        if seconds < 60 {
+            return "just now"
+        }
+
+        if seconds < 60 * 60 * 24 * 7 {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .full
+            return formatter.localizedString(for: date, relativeTo: now)
+        }
+
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+
+            if let timestampText {
+                Text(timestampText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 }
