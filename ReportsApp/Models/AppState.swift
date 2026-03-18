@@ -103,6 +103,7 @@ final class AppState: ObservableObject {
     @Published var selectedGeoID: String = "18" // default market (Indiana)
     @Published var selectedTab: Int = 0
     @Published var sparkPrompt: String? = nil
+    @Published var insightGeoID: String? = nil
 
     private let prefsService = UserPrefsService()
 
@@ -142,12 +143,26 @@ final class AppState: ObservableObject {
 
     func handleDeepLink(_ url: URL) {
         guard url.scheme?.lowercased() == "iarhousinghub" else { return }
-        guard url.host == "spark" else { return }
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let query = components?.queryItems?.first(where: { $0.name == "q" })?.value
 
-        sparkPrompt = query
-        selectedTab = 2
+        if url.host == "spark" {
+            let query = components?.queryItems?.first(where: { $0.name == "q" })?.value
+            sparkPrompt = query
+            selectedTab = 2
+            return
+        }
+
+        if url.host == "market" {
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+
+            if let geoID = pathComponents.first {
+                insightGeoID = geoID
+            }
+
+            if pathComponents.count > 1, pathComponents[1].lowercased() == "insights" {
+                selectedTab = 0
+            }
+        }
     }
 }

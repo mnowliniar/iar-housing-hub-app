@@ -13,5 +13,6 @@ import SwiftUI
 struct HousingHubWidgetBundle: WidgetBundle {
     var body: some Widget {
         HousingHubWidget()
+        HousingHubInsightWidget()
     }
 }

@@ -10,6 +10,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var app: AppState
+    @State private var showDeepLinkedInsights = false
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -37,6 +38,22 @@ struct HomeView: View {
                 )
         )
         .navigationTitle("Home")
+        .background {
+            NavigationLink(isActive: $showDeepLinkedInsights) {
+                InsightsView(geoID: Int(app.insightGeoID ?? app.selectedGeoID) ?? 18)
+                    .environmentObject(app)
+                    .onDisappear {
+                        app.insightGeoID = nil
+                        showDeepLinkedInsights = false
+                    }
+            } label: {
+                EmptyView()
+            }
+            .hidden()
+        }
+        .onChange(of: app.insightGeoID) { _, newValue in
+            showDeepLinkedInsights = (newValue != nil)
+        }
     }
 }
 

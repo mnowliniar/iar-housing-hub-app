@@ -7,9 +7,11 @@
 
 
 import SwiftUI
+private let widgetTeal = Color(red: 0/255, green: 170/255, blue: 185/255)
 
 struct MiniSparkline: View {
     let points: [Double]
+    var trendLabel: String? = nil
 
     private var minY: Double {
         guard let minVal = points.min(), let maxVal = points.max() else { return 0 }
@@ -24,24 +26,37 @@ struct MiniSparkline: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            Path { path in
-                guard points.count > 1 else { return }
+        ZStack(alignment: .bottomLeading) {
+            GeometryReader { geo in
+                Path { path in
+                    guard points.count > 1 else { return }
 
-                for (index, value) in points.enumerated() {
-                    let x = geo.size.width * CGFloat(index) / CGFloat(max(points.count - 1, 1))
-                    let yRatio = (value - minY) / max(maxY - minY, 1)
-                    let y = geo.size.height * (1 - CGFloat(yRatio))
+                    for (index, value) in points.enumerated() {
+                        let x = geo.size.width * CGFloat(index) / CGFloat(max(points.count - 1, 1))
+                        let yRatio = (value - minY) / max(maxY - minY, 1)
+                        let y = geo.size.height * (1 - CGFloat(yRatio))
 
-                    if index == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
+                        if index == 0 {
+                            path.move(to: CGPoint(x: x, y: y))
+                        } else {
+                            path.addLine(to: CGPoint(x: x, y: y))
+                        }
                     }
                 }
+                .stroke(widgetTeal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             }
-            .stroke(widgetTeal, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+
+            if let label = trendLabel, !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 2)
+                    .padding(.bottom, 1)
+                    .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                    .shadow(color: Color(.systemBackground), radius: 3, x: 0, y: 0)
+                    .shadow(color: Color(.systemBackground), radius: 4, x: 0, y: 0)
+            }
         }
-        .frame(height: 36)
+        .frame(maxWidth: .infinity, minHeight: 36, maxHeight: .infinity, alignment: .bottom)
     }
 }
