@@ -77,6 +77,12 @@ struct PriceBreakoutInsightChartView: View {
         return maxValue * 1.12
     }
 
+    private var hasNegativeHighlightedChange: Bool {
+        points.contains { point in
+            point.isHighlighted && ((point.current / point.previous) - 1) * 100 < 0
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
@@ -95,13 +101,14 @@ struct PriceBreakoutInsightChartView: View {
             GeometryReader { geo in
                 let leftLabelWidth: CGFloat = 92
                 let plotSpacing: CGFloat = 12
-                let rightLabelWidth: CGFloat = 52
-                let plotWidth = max(geo.size.width - leftLabelWidth - plotSpacing - rightLabelWidth, 10)
+                let leftValuePadding: CGFloat = hasNegativeHighlightedChange ? 52 : 0
+                let rightValuePadding: CGFloat = hasNegativeHighlightedChange ? 12 : 52
+                let plotWidth = max(geo.size.width - leftLabelWidth - plotSpacing - leftValuePadding - rightValuePadding, 10)
 
                 ZStack(alignment: .topLeading) {
                     // Grid + axis labels
                     ForEach(axisValues(), id: \.self) { tick in
-                        let x = leftLabelWidth + plotSpacing + CGFloat((tick - xMin) / (xMax - xMin)) * plotWidth
+                        let x = leftLabelWidth + plotSpacing + leftValuePadding + CGFloat((tick - xMin) / (xMax - xMin)) * plotWidth
 
                         Path { path in
                             path.move(to: CGPoint(x: x, y: 24))
@@ -122,7 +129,8 @@ struct PriceBreakoutInsightChartView: View {
                                 plotWidth: plotWidth,
                                 leftLabelWidth: leftLabelWidth,
                                 plotSpacing: plotSpacing,
-                                rightLabelWidth: rightLabelWidth
+                                leftValuePadding: leftValuePadding,
+                                rightValuePadding: rightValuePadding
                             )
                         }
                     }
@@ -132,10 +140,13 @@ struct PriceBreakoutInsightChartView: View {
         }
     }
 
-    private func rowView(point: PriceBreakoutPoint, plotWidth: CGFloat, leftLabelWidth: CGFloat, plotSpacing: CGFloat, rightLabelWidth: CGFloat) -> some View {
-        let currentX = CGFloat((point.current - xMin) / (xMax - xMin)) * plotWidth
-        let previousX = CGFloat((point.previous - xMin) / (xMax - xMin)) * plotWidth
+    private func rowView(point: PriceBreakoutPoint, plotWidth: CGFloat, leftLabelWidth: CGFloat, plotSpacing: CGFloat, leftValuePadding: CGFloat, rightValuePadding: CGFloat) -> some View {
+        let plotOriginX = leftValuePadding
+        let currentX = plotOriginX + CGFloat((point.current - xMin) / (xMax - xMin)) * plotWidth
+        let previousX = plotOriginX + CGFloat((point.previous - xMin) / (xMax - xMin)) * plotWidth
         let highlight = point.isHighlighted
+        let pct = calculatedPercentChange(for: point)
+        let isNegative = (pct ?? 0) < 0
 
         return HStack(alignment: .center, spacing: plotSpacing) {
             Text(point.label)
@@ -147,7 +158,7 @@ struct PriceBreakoutInsightChartView: View {
             ZStack(alignment: .leading) {
                 if highlight {
                     Path { path in
-                        path.move(to: CGPoint(x: previousX+5, y: 11))
+                        path.move(to: CGPoint(x: previousX + (isNegative ? -5 : 5), y: 11))
                         path.addLine(to: CGPoint(x: currentX, y: 11))
                     }
                     .stroke(BrandColors.teal.opacity(0.5), lineWidth: 3)
@@ -162,14 +173,15 @@ struct PriceBreakoutInsightChartView: View {
                     .fill(highlight ? BrandColors.teal : Color.gray.opacity(0.6))
                     .frame(width: highlight ? 12 : 10, height: highlight ? 12 : 10)
                     .offset(x: currentX - (highlight ? 6 : 5), y: 0)
-                if highlight, let pct = calculatedPercentChange(for: point) {
-                        Text(formattedPercent(pct))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(BrandColors.teal)
-                            .offset(x: currentX + 10, y: 0)
-                    }
+                if highlight, let pct {
+                    Text(formattedPercent(pct))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(BrandColors.teal)
+                        .frame(width: 44, alignment: isNegative ? .trailing : .leading)
+                        .offset(x: isNegative ? currentX - 50 : currentX + 10, y: 0)
                 }
-                .frame(width: plotWidth, height: 22, alignment: .leading)
+            }
+            .frame(width: leftValuePadding + plotWidth + rightValuePadding, height: 22, alignment: .leading)
         }
     }
 
