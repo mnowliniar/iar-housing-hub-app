@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		71B9466E2F6B0C3600BBC3B2 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466D2F6B0C3500BBC3B2 /* WidgetKit.framework */; };
+		71B946702F6B0C3600BBC3B2 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466F2F6B0C3600BBC3B2 /* SwiftUI.framework */; };
+		71B946812F6B0C3800BBC3B2 /* IAR Housing Hub WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		71F09F462E5FE8E70086B5C3 /* ReportsWatchApp Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 71F09F262E5FE8E50086B5C3 /* ReportsWatchApp Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -24,6 +27,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 71861BA02E5E2EEA00F5F133;
 			remoteInfo = ReportsApp;
+		};
+		71B9467F2F6B0C3800BBC3B2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71861B992E5E2EEA00F5F133 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 71B9466A2F6B0C3500BBC3B2;
+			remoteInfo = "IAR Housing Hub WidgetsExtension";
 		};
 		71F09F332E5FE8E70086B5C3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -49,6 +59,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		71B946862F6B0C3800BBC3B2 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				71B946812F6B0C3800BBC3B2 /* IAR Housing Hub WidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71F09F4A2E5FE8E70086B5C3 /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -66,12 +87,22 @@
 		71861BA12E5E2EEA00F5F133 /* ReportsApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReportsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		71861BAE2E5E2EEB00F5F133 /* ReportsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReportsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		71861BB82E5E2EEB00F5F133 /* ReportsAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReportsAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "IAR Housing Hub WidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		71B9466D2F6B0C3500BBC3B2 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		71B9466F2F6B0C3600BBC3B2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		71F09F262E5FE8E50086B5C3 /* ReportsWatchApp Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ReportsWatchApp Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71F09F322E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ReportsWatchApp Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71F09F3C2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ReportsWatchApp Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		71B946852F6B0C3800BBC3B2 /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub WidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 71B9466A2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension */;
+		};
 		71F09F522E5FE99A0086B5C3 /* Exceptions for "ReportsApp" folder in "ReportsWatchApp Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -119,6 +150,14 @@
 			path = ReportsAppUITests;
 			sourceTree = "<group>";
 		};
+		71B946712F6B0C3600BBC3B2 /* IAR Housing Hub Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				71B946852F6B0C3800BBC3B2 /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub WidgetsExtension" target */,
+			);
+			path = "IAR Housing Hub Widgets";
+			sourceTree = "<group>";
+		};
 		71F09F272E5FE8E50086B5C3 /* ReportsWatchApp Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "ReportsWatchApp Watch App";
@@ -158,6 +197,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		71B946682F6B0C3500BBC3B2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				71B946702F6B0C3600BBC3B2 /* SwiftUI.framework in Frameworks */,
+				71B9466E2F6B0C3600BBC3B2 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71F09F232E5FE8E50086B5C3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -191,6 +239,8 @@
 				71F09F272E5FE8E50086B5C3 /* ReportsWatchApp Watch App */,
 				71F09F352E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests */,
 				71F09F3F2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests */,
+				71B946712F6B0C3600BBC3B2 /* IAR Housing Hub Widgets */,
+				71B9466C2F6B0C3500BBC3B2 /* Frameworks */,
 				71861BA22E5E2EEA00F5F133 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -204,8 +254,18 @@
 				71F09F262E5FE8E50086B5C3 /* ReportsWatchApp Watch App.app */,
 				71F09F322E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests.xctest */,
 				71F09F3C2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests.xctest */,
+				71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		71B9466C2F6B0C3500BBC3B2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				71B9466D2F6B0C3500BBC3B2 /* WidgetKit.framework */,
+				71B9466F2F6B0C3600BBC3B2 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -219,11 +279,13 @@
 				71861B9E2E5E2EEA00F5F133 /* Frameworks */,
 				71861B9F2E5E2EEA00F5F133 /* Resources */,
 				71F09F4A2E5FE8E70086B5C3 /* Embed Watch Content */,
+				71B946862F6B0C3800BBC3B2 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				71F09F452E5FE8E70086B5C3 /* PBXTargetDependency */,
+				71B946802F6B0C3800BBC3B2 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				71861BA32E5E2EEA00F5F133 /* ReportsApp */,
@@ -280,6 +342,28 @@
 			productName = ReportsAppUITests;
 			productReference = 71861BB82E5E2EEB00F5F133 /* ReportsAppUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		71B9466A2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71B946822F6B0C3800BBC3B2 /* Build configuration list for PBXNativeTarget "IAR Housing Hub WidgetsExtension" */;
+			buildPhases = (
+				71B946672F6B0C3500BBC3B2 /* Sources */,
+				71B946682F6B0C3500BBC3B2 /* Frameworks */,
+				71B946692F6B0C3500BBC3B2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				71B946712F6B0C3600BBC3B2 /* IAR Housing Hub Widgets */,
+			);
+			name = "IAR Housing Hub WidgetsExtension";
+			packageProductDependencies = (
+			);
+			productName = "IAR Housing Hub WidgetsExtension";
+			productReference = 71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		71F09F252E5FE8E50086B5C3 /* ReportsWatchApp Watch App */ = {
 			isa = PBXNativeTarget;
@@ -356,7 +440,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					71861BA02E5E2EEA00F5F133 = {
@@ -369,6 +453,9 @@
 					71861BB72E5E2EEB00F5F133 = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = 71861BA02E5E2EEA00F5F133;
+					};
+					71B9466A2F6B0C3500BBC3B2 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 					71F09F252E5FE8E50086B5C3 = {
 						CreatedOnToolsVersion = 16.4;
@@ -403,6 +490,7 @@
 				71F09F252E5FE8E50086B5C3 /* ReportsWatchApp Watch App */,
 				71F09F312E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests */,
 				71F09F3B2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests */,
+				71B9466A2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -423,6 +511,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		71861BB62E5E2EEB00F5F133 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71B946692F6B0C3500BBC3B2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -474,6 +569,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		71B946672F6B0C3500BBC3B2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71F09F222E5FE8E50086B5C3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -507,6 +609,11 @@
 			isa = PBXTargetDependency;
 			target = 71861BA02E5E2EEA00F5F133 /* ReportsApp */;
 			targetProxy = 71861BB92E5E2EEB00F5F133 /* PBXContainerItemProxy */;
+		};
+		71B946802F6B0C3800BBC3B2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 71B9466A2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension */;
+			targetProxy = 71B9467F2F6B0C3800BBC3B2 /* PBXContainerItemProxy */;
 		};
 		71F09F342E5FE8E70086B5C3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -781,6 +888,68 @@
 			};
 			name = Release;
 		};
+		71B946832F6B0C3800BBC3B2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JY22826US7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "IAR Housing Hub Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "IAR Housing Hub Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "IAR.ReportsApp.IAR-Housing-Hub-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		71B946842F6B0C3800BBC3B2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JY22826US7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "IAR Housing Hub Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "IAR Housing Hub Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "IAR.ReportsApp.IAR-Housing-Hub-Widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		71F09F482E5FE8E70086B5C3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -952,6 +1121,15 @@
 			buildConfigurations = (
 				71861BC92E5E2EEB00F5F133 /* Debug */,
 				71861BCA2E5E2EEB00F5F133 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		71B946822F6B0C3800BBC3B2 /* Build configuration list for PBXNativeTarget "IAR Housing Hub WidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71B946832F6B0C3800BBC3B2 /* Debug */,
+				71B946842F6B0C3800BBC3B2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
