@@ -103,13 +103,16 @@ struct WeeklyWowInsightChartView: View {
                     xEnd: .value("Prior6End", end),
                     y: .value("Prior6Avg", avg)
                 )
-                .foregroundStyle(Color.gray.opacity(0.32))
+                .foregroundStyle(Color.gray.opacity(0.6))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                 .annotation(position: .overlay, alignment: .leading) {
-                    Text("6 wk")
+                    Text("6wk")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.gray.opacity(0.75))
-                        .offset(y: -10)
+                        .foregroundStyle(Color.gray.opacity(0.9))
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .offset(y: -6)
                 }
             }
 
@@ -121,13 +124,16 @@ struct WeeklyWowInsightChartView: View {
                     xEnd: .value("Last3End", end),
                     y: .value("Last3Avg", avg)
                 )
-                .foregroundStyle(BrandColors.teal.opacity(0.75))
+                .foregroundStyle(BrandColors.teal.opacity(0.9))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                 .annotation(position: .overlay, alignment: .leading) {
-                    Text("3 wk")
+                    Text("3wk")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(BrandColors.teal.opacity(0.75))
-                        .offset(y: -10)
+                        .foregroundStyle(BrandColors.teal)
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .shadow(color: Color(.systemBackground), radius: 2, x: 0, y: 0)
+                        .offset(y: -6)
                 }
             }
 

@@ -46,7 +46,14 @@ struct DashboardResponse: Decodable {
         }
     }
     struct Row: Decodable { let report_date: String; let facts: [String: Fact]? }
-    struct Viz: Decodable { let viz_id: Int; let viz_title: String; let viz_subtitle: String?; let rows: [Row] }
+    struct Viz: Decodable {
+        let viz_id: Int
+        let viz_title: String
+        let viz_subtitle: String?
+        let viz_timespan: String?
+        let viz_format: String?
+        let rows: [Row]
+    }
     struct GeoBlock: Decodable { let geo_id: Int; let geo_name: String; let viz: [Viz] }
     let meta: Meta; let results: [GeoBlock]
 }
@@ -68,7 +75,13 @@ struct Tile: Identifiable {
     let fact1Value: Double?      // small stat numeric
     let fact1Label: String?      // label for the small stat
     let fact1Display: String?    // original formatted string for small stat
+    let fact3Value: Double?
+    let fact3Label: String?
+    let fact3Display: String?
     let latestReportDate: String?
+    let geoName: String?
+    let vizFormat: String?
+    let vizTimespan: String?
     let series: [Double]
     let points: [SparkPoint]
 }
@@ -80,7 +93,7 @@ final class DashboardService {
     func fetchTiles(geoID: String,
                     vizIDs: [Int],
                     proptype: String = "all",
-                    facts: [String] = ["fact1","fact2"]) async throws -> [Tile] {
+                    facts: [String] = ["fact1","fact2","fact3"]) async throws -> [Tile] {
 
         let url = URL(string:
           "https://data.indianarealtors.com/api/viz_set/proptype/\(proptype)" +
@@ -117,6 +130,7 @@ final class DashboardService {
             let last = v.rows.last
             let f2 = last?.facts?["fact2"]
             let f1 = last?.facts?["fact1"]
+            let f3 = last?.facts?["fact3"]
 
             return Tile(
                 vizID: v.viz_id,
@@ -127,7 +141,13 @@ final class DashboardService {
                 fact1Value: f1?.value,
                 fact1Label: f1?.label,
                 fact1Display: f1?.raw,
+                fact3Value: f3?.value,
+                fact3Label: f3?.label,
+                fact3Display: f3?.raw,
                 latestReportDate: last?.report_date,
+                geoName: geo.geo_name,
+                vizFormat: v.viz_format,
+                vizTimespan: v.viz_timespan,
                 series: seriesVals,
                 points: points
             )
@@ -138,6 +158,8 @@ final class DashboardService {
 // 3) Views
 struct Sparkline: View {
     let points: [SparkPoint]
+    let vizFormat: String?
+    let trendLabel: String?
     @State private var selectedX: Int? = nil
 
     var body: some View {
@@ -171,7 +193,7 @@ struct Sparkline: View {
         .chartYScale(domain: lower...upper)
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
-        .frame(height: 44)
+        .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity, alignment: .bottom)
         .padding(.top, 2)
         .chartOverlay { proxy in
             GeometryReader { geo in
@@ -199,7 +221,7 @@ struct Sparkline: View {
             if let sel = selectedX, let p = points.first(where: { $0.x == sel }) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(p.date).font(.caption2).bold()
-                    Text(p.value.formatted()).font(.caption2)
+                    Text(formattedValue(p.value)).font(.caption2)
                 }
                 .padding(6)
                 .background(.ultraThinMaterial)
@@ -207,33 +229,125 @@ struct Sparkline: View {
                 .padding(.bottom, 4)
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            if let trendLabel, !trendLabel.isEmpty {
+                Text(trendLabel)
+                    .font(.system(size: 10).bold())
+                    .foregroundStyle(.secondary)
+                    .shadow(color: Color(.systemBackground).opacity(0.98), radius: 3, x: 0, y: 0)
+                    .shadow(color: Color(.systemBackground).opacity(0.98), radius: 3, x: 0, y: 0)
+                    .shadow(color: Color(.systemBackground).opacity(0.98), radius: 1, x: 0, y: 0)
+                    .padding(.leading, 2)
+                    .padding(.bottom, 1)
+            }
+        }
+    }
+
+    private func formattedValue(_ value: Double) -> String {
+        switch vizFormat {
+        case "$":
+            return "$" + Int(value.rounded()).formatted()
+        case "%":
+            if value.rounded() == value {
+                return "\(Int(value))%"
+            } else {
+                return String(format: "%.1f%%", value)
+            }
+        default:
+            if value.rounded() == value {
+                return Int(value).formatted()
+            } else {
+                return String(format: "%.1f", value)
+            }
+        }
     }
 }
 
 struct TileCard: View {
     let tile: Tile
+    var showFact3Row: Bool = false
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(tile.title).font(.headline)
-            if let d = tile.latestReportDate { Text(d).font(.caption).foregroundStyle(.secondary) }
+
+            if let d = tile.latestReportDate {
+                Text(tile.geoName.map { "\(d) • \($0)" } ?? d)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
             if let v = tile.latestValue {
-                HStack(spacing: 8) {
-                    Text(v.formatted()) // style as needed (currency, percent, etc.)
+                HStack(alignment: .top, spacing: 8) {
+                    Text(formattedValue(v))
                         .font(.system(size: 32, weight: .bold, design: .rounded))
+
                     if let sVal = tile.fact1Value {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text((tile.fact1Display ?? sVal.formatted()))
+                            Text(tile.fact1Display ?? formattedValue(sVal))
                                 .font(.subheadline).bold()
-                            if let sLbl = tile.fact1Label { Text(sLbl).font(.caption).foregroundStyle(.secondary) }
+
+                            if let sLbl = tile.fact1Label {
+                                Text(sLbl)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                if showFact3Row,
+                   let fact3Display = tile.fact3Display,
+                   !fact3Display.isEmpty {
+                    HStack(spacing: 4) {
+                        Text(fact3Display)
+                            .font(.caption)
+                            .bold()
+
+                        if let fact3Label = tile.fact3Label, !fact3Label.isEmpty {
+                            Text(fact3Label)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
             }
-            if !tile.points.isEmpty { Sparkline(points: tile.points) }
+
+            if !tile.points.isEmpty {
+                Sparkline(
+                    points: tile.points,
+                    vizFormat: tile.vizFormat,
+                    trendLabel: tile.vizTimespan.map { "12-\($0.lowercased()) trend" }
+                )
+                .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity, alignment: .bottom)
+            } else {
+                Spacer(minLength: 0)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()
         .glassCard(cornerRadius: 12)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+    }
+
+    private func formattedValue(_ value: Double) -> String {
+        switch tile.vizFormat {
+        case "$":
+            return "$" + Int(value.rounded()).formatted()
+        case "%":
+            if value.rounded() == value {
+                return "\(Int(value))%"
+            } else {
+                return String(format: "%.1f%%", value)
+            }
+        default:
+            if value.rounded() == value {
+                return Int(value).formatted()
+            } else {
+                return String(format: "%.1f", value)
+            }
+        }
     }
 }
 
@@ -268,7 +382,7 @@ struct TileCardSkeleton: View {
                 .frame(height: 44)
         }
         .padding()
-        .frame(height: 169)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .glassCard(cornerRadius: 12)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
@@ -297,28 +411,44 @@ struct MarketDashboardView: View {
     var vizIDs: [Int] { selectedVizIDs }
 
     var body: some View {
-        let columns: [GridItem] = (hSize == .compact)
-            ? [GridItem(.flexible())]
-            : [GridItem(.flexible()), GridItem(.flexible())]
-        let skeletonCount = min(3, vizIDs.count)
-
         ScrollView {
-            ZStack(alignment: .topLeading) {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(0..<skeletonCount, id: \.self) { _ in
-                        TileCardSkeleton()
-                    }
-                }
-                .opacity(showSkeletonTiles ? 1 : 0)
+            Group {
+                if hSize == .compact {
+                    let skeletonCount = min(3, vizIDs.count)
 
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(tiles) { tile in
-                        TileCard(tile: tile)
-                            .opacity(showLoadedTiles ? 1 : 0)
+                    ZStack(alignment: .topLeading) {
+                        LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                            ForEach(0..<skeletonCount, id: \.self) { _ in
+                                TileCardSkeleton()
+                                    .frame(height: 169)
+                            }
+                        }
+                        .opacity(showSkeletonTiles ? 1 : 0)
+
+                        LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                            ForEach(tiles) { tile in
+                                TileCard(tile: tile)
+                                    .frame(height: 169)
+                                    .opacity(showLoadedTiles ? 1 : 0)
+                            }
+                        }
                     }
+                    .padding()
+                } else {
+                    ZStack(alignment: .topLeading) {
+                        if showSkeletonTiles {
+                            dashboardWideSkeletonLayout
+                                .opacity(showSkeletonTiles ? 1 : 0)
+                        }
+
+                        if showLoadedTiles {
+                            dashboardWideLoadedLayout
+                                .opacity(showLoadedTiles ? 1 : 0)
+                        }
+                    }
+                    .padding()
                 }
             }
-            .padding()
             VStack(spacing: 4) {
                 Text(activeGeo?.displayName ?? "Dashboard")
                     .font(.caption2)
@@ -441,6 +571,62 @@ struct MarketDashboardView: View {
         activeGeo = await APIService.fetchGeo(geoid: trimmedID)
         print("[Dashboard] activeGeo displayName:", activeGeo?.displayName)
     }
+
+    private var dashboardWideSkeletonLayout: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 12
+            let columnWidth = (geo.size.width - spacing) / 2
+            let tileHeight: CGFloat = 169
+            let featuredHeight = tileHeight * 2 + spacing
+
+            HStack(alignment: .top, spacing: spacing) {
+                VStack(spacing: spacing) {
+                    TileCardSkeleton()
+                        .frame(width: columnWidth, height: tileHeight)
+                    TileCardSkeleton()
+                        .frame(width: columnWidth, height: tileHeight)
+                }
+
+                TileCardSkeleton()
+                    .frame(width: columnWidth, height: featuredHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .frame(height: 350)
+    }
+
+    @ViewBuilder
+    private var dashboardWideLoadedLayout: some View {
+        if tiles.count >= 3 {
+            GeometryReader { geo in
+                let spacing: CGFloat = 12
+                let columnWidth = (geo.size.width - spacing) / 2
+                let tileHeight: CGFloat = 169
+                let featuredHeight = tileHeight * 2 + spacing
+
+                HStack(alignment: .top, spacing: spacing) {
+                    VStack(spacing: spacing) {
+                        TileCard(tile: tiles[0])
+                            .frame(width: columnWidth, height: tileHeight)
+                        TileCard(tile: tiles[1])
+                            .frame(width: columnWidth, height: tileHeight)
+                    }
+
+                    TileCard(tile: tiles[2], showFact3Row: true)
+                        .frame(width: columnWidth, height: featuredHeight)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .frame(height: 350)
+        } else {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(tiles) { tile in
+                    TileCard(tile: tile)
+                        .frame(height: 169)
+                }
+            }
+        }
+    }
 }
 
 struct VizItem: Identifiable, Hashable, Decodable { let id: Int; let title: String; let subtitle: String?
@@ -535,5 +721,6 @@ struct VizPickerView: View {
         }
     }
 }
+
 
 

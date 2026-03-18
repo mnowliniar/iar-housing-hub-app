@@ -25,24 +25,34 @@ struct MarketDashboardSection: View {
     }
 
     var body: some View {
-        let columns: [GridItem] = (hSize == .compact)
-            ? [GridItem(.flexible())]
-            : [GridItem(.flexible()), GridItem(.flexible())]
+        Group {
+            if hSize == .compact {
+                ZStack(alignment: .topLeading) {
+                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                        ForEach(0..<min(3, vizIDs.count), id: \.self) { _ in
+                            TileCardSkeleton()
+                        }
+                    }
+                    .opacity(showSkeletonTiles ? 1 : 0)
 
-        let skeletonCount = min(3, vizIDs.count)
-
-        ZStack(alignment: .topLeading) {
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(0..<skeletonCount, id: \.self) { _ in
-                    TileCardSkeleton()
+                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                        ForEach(tiles) { tile in
+                            TileCard(tile: tile)
+                                .opacity(showLoadedTiles ? 1 : 0)
+                        }
+                    }
                 }
-            }
-            .opacity(showSkeletonTiles ? 1 : 0)
+            } else {
+                ZStack(alignment: .topLeading) {
+                    if showSkeletonTiles {
+                        dashboardWideSkeletonLayout
+                            .opacity(showSkeletonTiles ? 1 : 0)
+                    }
 
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(tiles) { tile in
-                    TileCard(tile: tile)
-                        .opacity(showLoadedTiles ? 1 : 0)
+                    if showLoadedTiles {
+                        dashboardWideLoadedLayout
+                            .opacity(showLoadedTiles ? 1 : 0)
+                    }
                 }
             }
         }
@@ -58,6 +68,63 @@ struct MarketDashboardSection: View {
         .onChange(of: app.userPrefs.app.dashboardVizIDs) { _, _ in
             Task {
                 await loadTiles()
+            }
+        }
+    }
+
+    private var dashboardWideSkeletonLayout: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 12
+            let columnWidth = (geo.size.width - spacing) / 2
+            let tileHeight = max(170, columnWidth * 0.42)
+            let featuredHeight = tileHeight * 2 + spacing
+
+            HStack(alignment: .top, spacing: spacing) {
+                VStack(spacing: spacing) {
+                    TileCardSkeleton()
+                        .frame(height: tileHeight)
+                    TileCardSkeleton()
+                        .frame(height: tileHeight)
+                }
+                .frame(width: columnWidth)
+
+                TileCardSkeleton()
+                    .frame(width: columnWidth, height: featuredHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .frame(height: 420)
+    }
+
+    @ViewBuilder
+    private var dashboardWideLoadedLayout: some View {
+        if tiles.count >= 3 {
+            GeometryReader { geo in
+                let spacing: CGFloat = 12
+                let columnWidth = (geo.size.width - spacing) / 2
+                let tileHeight = max(170, columnWidth * 0.42)
+                let featuredHeight = tileHeight * 2 + spacing
+
+                HStack(alignment: .top, spacing: spacing) {
+                    VStack(spacing: spacing) {
+                        TileCard(tile: tiles[0])
+                            .frame(height: tileHeight)
+                        TileCard(tile: tiles[1])
+                            .frame(height: tileHeight)
+                    }
+                    .frame(width: columnWidth)
+
+                    TileCard(tile: tiles[2])
+                        .frame(width: columnWidth, height: featuredHeight)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .frame(height: 420)
+        } else {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(tiles) { tile in
+                    TileCard(tile: tile)
+                }
             }
         }
     }
