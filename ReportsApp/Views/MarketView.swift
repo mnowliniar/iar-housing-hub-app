@@ -168,7 +168,14 @@ struct MarketView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(
+                            .regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 16)
@@ -251,7 +258,8 @@ struct MarketView: View {
         }
         .padding(20)
         .frame(width: 320, height: 400, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(cornerRadius: 12, tint: .clear)
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     private func insightCard(_ insight: InsightPreviewItem) -> some View {
@@ -273,7 +281,8 @@ struct MarketView: View {
         }
         .padding(20)
         .frame(width: 320, height: 400, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(cornerRadius: 12, tint: .clear)
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     @ViewBuilder
@@ -521,7 +530,8 @@ struct InsightsView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(cornerRadius: 12, tint: .clear)
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     private func insightCard(_ insight: InsightPreviewItem) -> some View {
@@ -541,7 +551,8 @@ struct InsightsView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(cornerRadius: 12, tint: .clear)
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     @ViewBuilder

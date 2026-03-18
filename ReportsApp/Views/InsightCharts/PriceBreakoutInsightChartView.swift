@@ -112,7 +112,7 @@ struct PriceBreakoutInsightChartView: View {
                         Text(formatValue(tick))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .position(x: x, y: 10)
+                            .position(x: x, y: 5)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -147,26 +147,26 @@ struct PriceBreakoutInsightChartView: View {
             ZStack(alignment: .leading) {
                 if highlight {
                     Path { path in
-                        path.move(to: CGPoint(x: previousX, y: 16))
-                        path.addLine(to: CGPoint(x: currentX, y: 16))
+                        path.move(to: CGPoint(x: previousX+5, y: 11))
+                        path.addLine(to: CGPoint(x: currentX, y: 11))
                     }
-                    .stroke(BrandColors.teal, lineWidth: 3)
+                    .stroke(BrandColors.teal.opacity(0.5), lineWidth: 3)
                 }
 
                 Circle()
                     .fill(highlight ? BrandColors.teal.opacity(0.5) : Color.gray.opacity(0.25))
                     .frame(width: 10, height: 10)
-                    .offset(x: previousX - 5, y: 5)
+                    .offset(x: previousX - 5, y: 0)
 
                 Circle()
                     .fill(highlight ? BrandColors.teal : Color.gray.opacity(0.6))
                     .frame(width: highlight ? 12 : 10, height: highlight ? 12 : 10)
-                    .offset(x: currentX - (highlight ? 6 : 5), y: 5)
+                    .offset(x: currentX - (highlight ? 6 : 5), y: 0)
                 if highlight, let pct = calculatedPercentChange(for: point) {
                         Text(formattedPercent(pct))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(BrandColors.teal)
-                            .offset(x: currentX + 10, y: 6)
+                            .offset(x: currentX + 10, y: 0)
                     }
                 }
                 .frame(width: plotWidth, height: 22, alignment: .leading)
