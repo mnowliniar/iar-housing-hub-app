@@ -3,7 +3,6 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var app: AppState
     @Environment(\.horizontalSizeClass) private var hSize
-    @State private var selectedTab = 0
 
     var body: some View {
         if hSize == .regular { // iPad: sidebar + main content
@@ -11,7 +10,7 @@ struct ContentView: View {
                 ReportListView()
                     .navigationTitle("Reports")
             } detail: {
-                TabView(selection: $selectedTab) {
+                TabView(selection: $app.selectedTab) {
                     NavigationStack {
                         HomeView()
                             .navigationTitle("Home")
@@ -41,7 +40,7 @@ struct ContentView: View {
                 }
             }
         } else { // iPhone: tab bar navigation
-            TabView(selection: $selectedTab) {
+            TabView(selection: $app.selectedTab) {
                 NavigationStack {
                     HomeView()
                         .navigationTitle("Home")

@@ -20,6 +20,7 @@ struct ReportsApp: App {
                 .environmentObject(auth)
                 .onOpenURL { url in
                     auth.handleIncomingURL(url)
+                    appState.handleDeepLink(url)
                 }
         }
     }

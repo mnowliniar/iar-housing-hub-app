@@ -16,6 +16,7 @@ final class AuthManager: ObservableObject {
     @Published var session: AuthSession?
 
     private let sessionAccount = "auth_session"
+    var onSignedIn: (() -> Void)?
 
     private let appExchangeURL = URL(string: "https://data.indianarealtors.com/app_auth_exchange")!
 
@@ -31,21 +32,33 @@ final class AuthManager: ObservableObject {
     func restoreSession() {
         do {
             guard let data = try KeychainHelper.load(account: sessionAccount) else {
+                print("[Auth] restoreSession: no keychain data")
                 state = .signedOut
                 return
             }
 
+            print("[Auth] restoreSession: loaded bytes:", data.count)
+
             let decoded = try JSONDecoder.authDecoder.decode(AuthSession.self, from: data)
+            print("[Auth] restoreSession decoded expiresAt:", decoded.expiresAt)
+            print("[Auth] restoreSession decoded isExpired:", decoded.isExpired)
+            print("[Auth] restoreSession decoded chatUserID:", decoded.chatUserID ?? "nil")
 
             if decoded.isExpired {
+                print("[Auth] restoreSession: session expired")
                 clearSession()
                 state = .signedOut
                 return
             }
 
             self.session = decoded
+            if let chatUserID = decoded.chatUserID {
+                UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
+            }
             self.state = .signedIn
+            onSignedIn?()
         } catch {
+            print("[Auth] restoreSession failed:", error)
             clearSession()
             state = .signedOut
         }
@@ -108,18 +121,24 @@ final class AuthManager: ObservableObject {
 
             let decoded = try JSONDecoder().decode(AuthExchangeResponse.self, from: data)
 
-            let expiresAt = ISO8601DateFormatter().date(from: decoded.expiresAt) ?? Date().addingTimeInterval(60 * 60)
+            guard let expiresAt = parseServerDate(decoded.expiresAt) else {
+                print("[Auth] exchangeCode invalid expiresAt:", decoded.expiresAt)
+                state = .error("Invalid expiration date from server")
+                return
+            }
 
             let newSession = AuthSession(
                 accessToken: decoded.accessToken,
                 tokenType: decoded.tokenType,
                 expiresAt: expiresAt,
-                wpUserId: decoded.wpUserId
+                wpUserId: decoded.wpUserId,
+                chatUserID: decoded.chatUserID ?? UserDefaults.standard.string(forKey: "chat_user_id")
             )
 
             try persistSession(newSession)
             self.session = newSession
             self.state = .signedIn
+            onSignedIn?()
         } catch {
             state = .error("Sign-in failed")
         }
@@ -136,12 +155,16 @@ final class AuthManager: ObservableObject {
     }
 
     private func persistSession(_ session: AuthSession) throws {
-        let data = try JSONEncoder().encode(session)
+        let data = try JSONEncoder.authEncoder.encode(session)
+        print("[Auth] persistSession expiresAt:", session.expiresAt)
+        print("[Auth] persistSession chatUserID:", session.chatUserID ?? "nil")
+        print("[Auth] persistSession bytes:", data.count)
         try KeychainHelper.save(data, account: sessionAccount)
     }
 
     private func clearSession() {
         KeychainHelper.delete(account: sessionAccount)
+        UserDefaults.standard.removeObject(forKey: "chat_user_id")
         session = nil
     }
 }
@@ -149,6 +172,40 @@ final class AuthManager: ObservableObject {
 private extension JSONDecoder {
     static var authDecoder: JSONDecoder {
         let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
+}
+
+private extension JSONEncoder {
+    static var authEncoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+}
+
+private func parseServerDate(_ value: String) -> Date? {
+    let isoWithFractional = ISO8601DateFormatter()
+    isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = isoWithFractional.date(from: value) {
+        return date
+    }
+
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime]
+    if let date = iso.date(from: value) {
+        return date
+    }
+
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+    if let date = formatter.date(from: value) {
+        return date
+    }
+
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    return formatter.date(from: value)
 }

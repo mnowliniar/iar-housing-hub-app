@@ -279,11 +279,15 @@ struct MarketDashboardView: View {
     @EnvironmentObject var app: AppState
     @State private var showGeoPicker = false
     @State private var showVizPicker = false
-    @AppStorage("selectedGeoID") private var storedGeoID: String = "18"
-    @AppStorage("dashboardVizIDs") private var vizIDsStored: String = "9,3,7"
+    @State private var activeGeo: Geo?
+    @State private var isLoadingGeo = false
     private var selectedVizIDs: [Int] {
-        get { vizIDsStored.split(separator: ",").compactMap { Int($0) } }
-        set { vizIDsStored = newValue.map(String.init).joined(separator: ",") }
+        let ids = app.userPrefs.app.dashboardVizIDs
+        return ids.isEmpty ? [9, 3, 7] : ids
+    }
+    private var selectedGeoID: String {
+        let geoid = app.userPrefs.app.dashboardGeoID ?? ""
+        return geoid.isEmpty ? "18" : geoid
     }
     @State private var tiles: [Tile] = []
     @State private var isLoading = true
@@ -316,16 +320,16 @@ struct MarketDashboardView: View {
             }
             .padding()
             VStack(spacing: 4) {
-                Text("EDIT DASHBOARD")
+                Text(activeGeo?.displayName ?? "Dashboard")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 8) {
-                    Button("Market") { showGeoPicker = true }
+                    Button("Pick Market") { showGeoPicker = true }
                         .font(.caption)
                     Text("•")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Metrics") { showVizPicker = true }
+                    Button("Pick Metrics") { showVizPicker = true }
                         .font(.caption)
                 }
             }
@@ -340,12 +344,13 @@ struct MarketDashboardView: View {
                 )
         )
         .task {
+            await loadCurrentGeo()
             isLoading = true
             showSkeletonTiles = true
             showLoadedTiles = false
             do {
                 let svc = DashboardService()
-                let fetched = try await svc.fetchTiles(geoID: app.selectedGeoID, vizIDs: vizIDs)
+                let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
                 tiles = Array(fetched.prefix(3))
             } catch {
 #if DEBUG
@@ -359,35 +364,23 @@ struct MarketDashboardView: View {
                 showSkeletonTiles = false
             }
         }
-        .onAppear {
-            app.selectedGeoID = storedGeoID
-        }
         .onChange(of: app.selectedGeoID) { newValue in
-            storedGeoID = newValue
+            app.userPrefs.app.selectedGeoID = newValue
+            showLoadedTiles = false
+            app.saveUserPrefs()
             isLoading = true
             showSkeletonTiles = true
             showLoadedTiles = false
-            Task {
-                let svc = DashboardService()
-                do {
-                    let fetched = try await svc.fetchTiles(geoID: app.selectedGeoID, vizIDs: vizIDs)
-                    tiles = Array(fetched.prefix(3))
-                } catch { tiles = [] }
-                isLoading = false
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showLoadedTiles = true
-                    showSkeletonTiles = false
-                }
-            }
         }
-        .onChange(of: vizIDsStored) { _ in
+        .onChange(of: app.userPrefs.app.dashboardVizIDs) { _ in
+            app.saveUserPrefs()
             isLoading = true
             showSkeletonTiles = true
             showLoadedTiles = false
             Task {
                 let svc = DashboardService()
                 do {
-                    let fetched = try await svc.fetchTiles(geoID: app.selectedGeoID, vizIDs: vizIDs)
+                    let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
                     tiles = Array(fetched.prefix(3))
                 } catch { tiles = [] }
                 isLoading = false
@@ -400,6 +393,8 @@ struct MarketDashboardView: View {
         .sheet(isPresented: $showGeoPicker) {
             GeoPickerSheet(onSelectGeo: { newGeo in
                 app.selectedGeoID = newGeo
+                app.userPrefs.app.dashboardGeoID = newGeo
+                Task { await loadCurrentGeo() }
                 showGeoPicker = false
                 isLoading = true
                 showSkeletonTiles = true
@@ -407,7 +402,7 @@ struct MarketDashboardView: View {
                 Task {
                     let svc = DashboardService()
                     do {
-                        let fetched = try await svc.fetchTiles(geoID: app.selectedGeoID, vizIDs: vizIDs)
+                        let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
                         tiles = Array(fetched.prefix(3))
                     } catch { tiles = [] }
                     isLoading = false
@@ -420,13 +415,31 @@ struct MarketDashboardView: View {
         }
         .sheet(isPresented: $showVizPicker) {
             VizPickerView(selected: Binding(
-                get: { vizIDsStored.split(separator: ",").compactMap { Int($0) } },
+                get: { selectedVizIDs },
                 set: { newValue in
-                    vizIDsStored = newValue.map(String.init).joined(separator: ",")
+                    app.userPrefs.app.dashboardVizIDs = newValue
                 }
             ))
         }
+        .onChange(of: app.userPrefs.app.dashboardGeoID) { _ in
+            Task {
+                await loadCurrentGeo()
+            }
+        }
         .navigationTitle("Dashboard")
+    }
+    private func loadCurrentGeo() async {
+        let trimmedID = selectedGeoID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else {
+            activeGeo = nil
+            return
+        }
+
+        isLoadingGeo = true
+        defer { isLoadingGeo = false }
+        print("[Dashboard] loadCurrentGeo selectedGeoID:", trimmedID)
+        activeGeo = await APIService.fetchGeo(geoid: trimmedID)
+        print("[Dashboard] activeGeo displayName:", activeGeo?.displayName)
     }
 }
 

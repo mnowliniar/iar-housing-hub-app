@@ -13,9 +13,11 @@ import Charts
 
 struct ChatView: View {
     @StateObject private var chat = ChatManager()
+    @EnvironmentObject var app: AppState
     @FocusState private var inputFocused: Bool
     @State private var activeGutsContent: GutsModalContent?
     @State private var showingChatList = false
+    @State private var isConsumingSparkPrompt = false
 
     private func associatedGutsText(for index: Int) -> String? {
         guard chat.messages.indices.contains(index) else { return nil }
@@ -48,6 +50,27 @@ struct ChatView: View {
     private func toggleGuts(at index: Int) {
         guard let gutsText = associatedGutsText(for: index) else { return }
         activeGutsContent = GutsModalContent(text: gutsText)
+    }
+
+    @MainActor
+    private func consumeSparkPromptIfNeeded() async {
+        guard let prompt = app.sparkPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty else { return }
+
+        isConsumingSparkPrompt = true
+        chat.newChat()
+        inputFocused = false
+        app.sparkPrompt = nil
+
+        await chat.send(prompt: prompt)
+        isConsumingSparkPrompt = false
+    }
+
+    private var hasPendingSparkPrompt: Bool {
+        guard let prompt = app.sparkPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !prompt.isEmpty
     }
 
     var body: some View {
@@ -83,7 +106,7 @@ struct ChatView: View {
                 ScrollView {
                     //LazyVStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
-                        if chat.messages.isEmpty {
+                        if chat.messages.isEmpty && !hasPendingSparkPrompt && !isConsumingSparkPrompt {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Ask a question")
                                     .font(.headline)
@@ -173,6 +196,14 @@ struct ChatView: View {
                         await chat.loadChat(threadID: item.id)
                     }
                 }
+            }
+        }
+        .task {
+            await consumeSparkPromptIfNeeded()
+        }
+        .onChange(of: app.sparkPrompt) { _, _ in
+            Task {
+                await consumeSparkPromptIfNeeded()
             }
         }
     }

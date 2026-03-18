@@ -40,24 +40,14 @@ struct HomeView: View {
     }
 }
 
-private func parseFavoriteIDs(_ raw: String) -> [Int] {
-    raw
-        .split(separator: ",")
-        .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-}
-
-private func encodeFavoriteIDs(_ ids: [Int]) -> String {
-    ids.map(String.init).joined(separator: ",")
-}
 
 struct FavoriteMarketsRail: View {
     @EnvironmentObject var app: AppState
-    @AppStorage("favoriteMarketIDs") private var favoriteMarketIDsRaw = ""
     @State private var geoLookup: [Int: Geo] = [:]
     @State private var showMarketPicker = false
 
     private var favoriteMarketIDs: [Int] {
-        parseFavoriteIDs(favoriteMarketIDsRaw)
+        app.userPrefs.app.favoriteMarketIDs
     }
 
     private var favoriteMarkets: [Geo] {
@@ -88,64 +78,16 @@ struct FavoriteMarketsRail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Favorite Markets")
-                    .font(.headline)
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Button {
-                        showMarketPicker = true
-                    } label: {
-                        Label("Add market", systemImage: "plus")
-                            .font(.caption)
-                    }
-                    .disabled(favoriteMarketIDs.count >= 5)
-                }
-            }
-            .padding(.horizontal)
-
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(orderedFavoriteMarkets) { market in
-                            FavoriteMarketCard(
-                                market: market,
-                                isSelected: market.geoid == selectedGeoIDInt,
-                                onSelect: {
-                                    app.selectedGeoID = String(market.geoid)
-                                    DispatchQueue.main.async {
-                                        withAnimation(.easeInOut(duration: 0.2)) {
-                                            proxy.scrollTo(market.geoid, anchor: .leading)
-                                        }
-                                    }
-                                },
-                                onRemove: { removeMarket(market.geoid) }
-                            )
-                            .id(market.geoid)
-                        }
-
-                        FavoriteMarketAddCard(
-                            isDisabled: favoriteMarketIDs.count >= 5,
-                            action: { showMarketPicker = true }
-                        )
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                }
-                .scrollClipDisabled()
-                .onChange(of: app.selectedGeoID) { _, newValue in
-                    if let id = Int(newValue) {
-                        DispatchQueue.main.async {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                proxy.scrollTo(id, anchor: .leading)
-                            }
-                        }
-                    }
-                }
-            }
+            headerRow
+            marketsScrollSection
         }
         .task {
             await loadFavoriteGeos()
+        }
+        .onChange(of: app.userPrefs.app.favoriteMarketIDs) { _, _ in
+            Task {
+                await loadFavoriteGeos()
+            }
         }
         .sheet(isPresented: $showMarketPicker) {
             FavoriteMarketPickerSheet(
@@ -157,13 +99,75 @@ struct FavoriteMarketsRail: View {
         }
     }
 
+    private var headerRow: some View {
+        HStack {
+            Text("Favorite Markets")
+                .font(.headline)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Button {
+                    showMarketPicker = true
+                } label: {
+                    Label("Add market", systemImage: "plus")
+                        .font(.caption)
+                }
+                .disabled(favoriteMarketIDs.count >= 5)
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var marketsScrollSection: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(orderedFavoriteMarkets) { market in
+                        NavigationLink {
+                            MarketView(geoID: market.geoid)
+                                .onAppear {
+                                    app.selectedGeoID = String(market.geoid)
+                                    app.saveUserPrefs()
+                                }
+                        } label: {
+                            FavoriteMarketCard(
+                                market: market,
+                                isSelected: market.geoid == selectedGeoIDInt,
+                                onSelect: {},
+                                onRemove: { removeMarket(market.geoid) }
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .id(market.geoid)
+                    }
+
+                    FavoriteMarketAddCard(
+                        isDisabled: favoriteMarketIDs.count >= 5,
+                        action: { showMarketPicker = true }
+                    )
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            .scrollClipDisabled()
+            .onChange(of: app.selectedGeoID) { _, newValue in
+                if let id = Int(newValue) {
+                    DispatchQueue.main.async {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(id, anchor: .leading)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func addMarket(_ geo: Geo) {
         var ids = favoriteMarketIDs
         guard !ids.contains(geo.geoid), ids.count < 5 else { return }
         ids.append(geo.geoid)
-        favoriteMarketIDsRaw = encodeFavoriteIDs(ids)
+        app.userPrefs.app.favoriteMarketIDs = ids
         geoLookup[geo.geoid] = geo
-        app.selectedGeoID = String(geo.geoid)
+        app.saveUserPrefs()
     }
 
     private func loadFavoriteGeos() async {
@@ -183,20 +187,20 @@ struct FavoriteMarketsRail: View {
     }
 
     private func removeMarket(_ id: Int) {
-        favoriteMarketIDsRaw = encodeFavoriteIDs(favoriteMarketIDs.filter { $0 != id })
+        app.userPrefs.app.favoriteMarketIDs = favoriteMarketIDs.filter { $0 != id }
         geoLookup.removeValue(forKey: id)
+        app.saveUserPrefs()
     }
 }
 
 struct FavoriteReportsRail: View {
     @EnvironmentObject var app: AppState
-    @AppStorage("favoriteReportIDs") private var favoriteReportIDsRaw = ""
     @State private var latestReports: [ReportListItem] = []
     @State private var geoLookup: [Int: Geo] = [:]
     @State private var showReportPicker = false
 
     private var favoriteReportIDs: [Int] {
-        parseFavoriteIDs(favoriteReportIDsRaw)
+        app.userPrefs.app.favoriteReportIDs
     }
 
     private var favoriteReports: [ReportListItem] {
@@ -255,15 +259,6 @@ struct FavoriteReportsRail: View {
                 .padding(.vertical, 8)
             }
             .scrollClipDisabled()
-
-            NavigationLink {
-                AllReportsListView(reports: latestReports, selectedGeo: activeGeo)
-            } label: {
-                Text("All reports for \(activeGeoName)")
-                    .font(.subheadline)
-                    .padding(.vertical, 6)
-            }
-            .padding(.horizontal)
         }
         .task {
             do { latestReports = try await ReportsService.fetch(limit: 50) } catch { latestReports = [] }
@@ -277,7 +272,11 @@ struct FavoriteReportsRail: View {
         .sheet(isPresented: $showReportPicker) {
             FavoriteReportPickerSheet(
                 reports: latestReports,
-                favoriteIDsRaw: $favoriteReportIDsRaw
+                favoriteIDs: favoriteReportIDs,
+                onChange: { ids in
+                    app.userPrefs.app.favoriteReportIDs = ids
+                    app.saveUserPrefs()
+                }
             )
         }
     }
@@ -299,7 +298,8 @@ struct FavoriteReportsRail: View {
     }
 
     private func removeReport(_ id: Int) {
-        favoriteReportIDsRaw = encodeFavoriteIDs(favoriteReportIDs.filter { $0 != id })
+        app.userPrefs.app.favoriteReportIDs = favoriteReportIDs.filter { $0 != id }
+        app.saveUserPrefs()
     }
 }
 
@@ -338,42 +338,46 @@ struct FavoriteMarketCard: View {
     let onRemove: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            ZStack(alignment: .topTrailing) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Image(systemName: "map.fill")
-                            .foregroundStyle(BrandColors.teal)
-                        Text(isSelected ? "Current Market" : market.type)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(market.displayName)
-                        .font(.headline)
-                        .lineLimit(2)
-                    Text("Tap to switch dashboard and reports to this market")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                }
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(10)
+        ZStack(alignment: .topTrailing) {
+            cardBody
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
             }
-            .padding()
-            .frame(width: 220, height: 110, alignment: .topLeading)
-            .glassCard(cornerRadius: 12, tint: .clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(isSelected ? BrandColors.teal : .clear, lineWidth: 2)
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+            .buttonStyle(.plain)
+            .padding(10)
         }
-        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "map.fill")
+                    .foregroundStyle(BrandColors.teal)
+                Text(isSelected ? "Current Market" : market.type)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(market.displayName)
+                .font(.headline)
+                .lineLimit(2)
+            Text("Tap to open this market view")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .frame(width: 220, height: 110, alignment: .topLeading)
+        .glassCard(cornerRadius: 12, tint: .clear)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isSelected ? BrandColors.teal : .clear, lineWidth: 2)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .contentShape(Rectangle())
     }
 }
 
@@ -412,20 +416,12 @@ struct FavoriteReportCard: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Group {
-                if let selectedGeo {
-                    NavigationLink {
-                        ReportSummaryView(
-                            report: Report(id: item.report_id, title: item.title),
-                            geo: selectedGeo,
-                            updateDate: item.latestUpdateDate
-                        )
-                    } label: {
-                        cardBody(subtitle: "Latest for \(selectedGeo.displayName)")
-                    }
-                } else {
-                    cardBody(subtitle: "Select a market first")
-                }
+            NavigationLink {
+                ReportBuilderView(
+                    report: Report(id: item.report_id, title: item.title)
+                )
+            } label: {
+                cardBody(subtitle: "Tap to build this report")
             }
             .buttonStyle(.plain)
 
@@ -458,7 +454,7 @@ struct FavoriteReportCard: View {
         .frame(width: 220, height: 110, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
-        .opacity(selectedGeo == nil ? 0.7 : 1)
+        .opacity(1)
     }
 }
 
@@ -509,13 +505,10 @@ struct AllReportsRow: View {
 
 struct FavoriteReportPickerSheet: View {
     let reports: [ReportListItem]
-    @Binding var favoriteIDsRaw: String
+    let favoriteIDs: [Int]
+    let onChange: ([Int]) -> Void
 
     @Environment(\.dismiss) private var dismiss
-
-    private var favoriteIDs: [Int] {
-        parseFavoriteIDs(favoriteIDsRaw)
-    }
 
     var body: some View {
         NavigationStack {
@@ -572,7 +565,7 @@ struct FavoriteReportPickerSheet: View {
         } else if ids.count < 3 {
             ids.append(id)
         }
-        favoriteIDsRaw = encodeFavoriteIDs(ids)
+        onChange(ids)
     }
 }
 // --- Blog rail (cards share dash style)
@@ -760,20 +753,21 @@ struct ReportsRail: View {
 
 struct ReportCard: View {
     let item: ReportListItem
-    @AppStorage("favoriteReportIDs") private var favoriteReportIDsRaw = ""
+    @EnvironmentObject var app: AppState
 
     private var isFavorite: Bool {
-        parseFavoriteIDs(favoriteReportIDsRaw).contains(item.report_id)
+        app.userPrefs.app.favoriteReportIDs.contains(item.report_id)
     }
 
     private func toggleFavorite() {
-        var ids = parseFavoriteIDs(favoriteReportIDsRaw)
+        var ids = app.userPrefs.app.favoriteReportIDs
         if ids.contains(item.report_id) {
             ids.removeAll { $0 == item.report_id }
         } else if ids.count < 3 {
             ids.append(item.report_id)
         }
-        favoriteReportIDsRaw = encodeFavoriteIDs(ids)
+        app.userPrefs.app.favoriteReportIDs = ids
+        app.saveUserPrefs()
     }
 
     private func formattedUpdate(_ s: String) -> String {

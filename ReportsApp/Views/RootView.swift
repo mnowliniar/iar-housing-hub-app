@@ -10,6 +10,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var auth: AuthManager
+    @EnvironmentObject var app: AppState
 
     var body: some View {
         Group {
@@ -50,6 +51,19 @@ struct RootView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            auth.onSignedIn = {
+                Task {
+                    await app.loadUserPrefs()
+                }
+            }
+
+            if auth.state == .signedIn {
+                Task {
+                    await app.loadUserPrefs()
+                }
             }
         }
     }
