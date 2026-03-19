@@ -8,6 +8,7 @@
 import SwiftUI
 import UIKit
 import Charts
+import LinkPresentation
 
 struct MarketView: View {
     let geoID: Int
@@ -79,8 +80,11 @@ struct MarketView: View {
                 await loadInsightVizData()
             }
         }
-        .sheet(item: $shareItem) { item in
-            ActivityViewController(activityItems: [item.image])
+        .sheet(item: $shareItem, onDismiss: {
+            shareItem?.cleanup()
+            shareItem = nil
+        }) { item in
+            ActivityViewController(activityItems: [item.activityItemSource])
         }
         .sheet(isPresented: $showGeoPicker) {
             GeoPickerSheet { newGeoID in
@@ -385,8 +389,9 @@ struct MarketView: View {
         let renderer = ImageRenderer(content: content)
         renderer.scale = UIScreen.main.scale
 
-        if let image = renderer.uiImage {
-            shareItem = InsightShareItem(image: image)
+        if let image = renderer.uiImage,
+           let share = InsightShareItem.make(image: image, title: capitalizedInsightHeadline(insight)) {
+            shareItem = share
         }
     }
 
@@ -500,8 +505,11 @@ struct InsightsView: View {
             await loadInsights()
             await loadInsightVizData()
         }
-        .sheet(item: $shareItem) { item in
-            ActivityViewController(activityItems: [item.image])
+        .sheet(item: $shareItem, onDismiss: {
+            shareItem?.cleanup()
+            shareItem = nil
+        }) { item in
+            ActivityViewController(activityItems: [item.activityItemSource])
         }
     }
 
@@ -655,8 +663,9 @@ struct InsightsView: View {
         let renderer = ImageRenderer(content: content)
         renderer.scale = UIScreen.main.scale
 
-        if let image = renderer.uiImage {
-            shareItem = InsightShareItem(image: image)
+        if let image = renderer.uiImage,
+           let share = InsightShareItem.make(image: image, title: capitalizedInsightHeadline(insight)) {
+            shareItem = share
         }
     }
 
@@ -702,6 +711,66 @@ struct InsightsView: View {
 private struct InsightShareItem: Identifiable {
     let id = UUID()
     let image: UIImage
+    let fileURL: URL
+    let title: String
+
+    var activityItemSource: ShareImageItemSource {
+        ShareImageItemSource(fileURL: fileURL, image: image, title: title)
+    }
+
+    static func make(image: UIImage, title: String) -> InsightShareItem? {
+        guard let data = image.pngData() else { return nil }
+
+        let safeTitle = title
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\n", with: " ")
+        let filename = "\(safeTitle.prefix(40))_\(UUID().uuidString.prefix(8)).png"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            try data.write(to: url, options: .atomic)
+            return InsightShareItem(image: image, fileURL: url, title: title)
+        } catch {
+            print("❌ Error writing shared image:", error)
+            return nil
+        }
+    }
+
+    func cleanup() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+}
+
+private final class ShareImageItemSource: NSObject, UIActivityItemSource {
+    let fileURL: URL
+    let image: UIImage
+    let title: String
+
+    init(fileURL: URL, image: UIImage, title: String) {
+        self.fileURL = fileURL
+        self.image = image
+        self.title = title
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        fileURL
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        fileURL
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        title
+    }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = title
+        metadata.imageProvider = NSItemProvider(object: image)
+        return metadata
+    }
 }
 
 private struct ActivityViewController: UIViewControllerRepresentable {
