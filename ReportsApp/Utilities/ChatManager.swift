@@ -626,6 +626,81 @@ final class ChatManager: ObservableObject {
         let href: String
     }
 
+    private struct ParsedSourceLink: Hashable {
+        let title: String
+        let href: String
+        let linkType: String
+        let note: String?
+    }
+
+    private func extractSourcesBlock(from text: String) -> (cleanedText: String, links: [ParsedSourceLink]) {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        let pattern = #"```sources\s*\n([\s\S]*?)```\s*$"#
+
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return (text, [])
+        }
+
+        let nsText = normalized as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        guard let match = regex.firstMatch(in: normalized, range: range), match.numberOfRanges >= 2,
+              let fullRange = Range(match.range(at: 0), in: normalized),
+              let jsonRange = Range(match.range(at: 1), in: normalized) else {
+            return (normalized, [])
+        }
+
+        let jsonString = String(normalized[jsonRange])
+        let cleaned = String(normalized[..<fullRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let data = jsonString.data(using: .utf8),
+              let rawArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return (normalized, [])
+        }
+
+        let links: [ParsedSourceLink] = rawArray.compactMap { item in
+            let linkType = (item["link_type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "source"
+            let reportURL = (item["report_url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let vizURL = (item["viz_url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let legacyURL = (item["url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let href: String?
+            switch linkType.lowercased() {
+            case "report":
+                href = reportURL ?? vizURL ?? legacyURL
+            case "chart":
+                href = vizURL ?? reportURL ?? legacyURL
+            default:
+                href = vizURL ?? reportURL ?? legacyURL
+            }
+
+            guard let resolvedHref = href, !resolvedHref.isEmpty else { return nil }
+
+            let rawTitle = (item["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let note = (item["note"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return ParsedSourceLink(
+                title: (rawTitle?.isEmpty == false) ? rawTitle! : resolvedHref,
+                href: normalizedInternalURLString(from: resolvedHref),
+                linkType: linkType,
+                note: (note?.isEmpty == false) ? note : nil
+            )
+        }
+
+        return (cleaned, links)
+    }
+
+    private func chatRelatedLinks(from sourceLinks: [ParsedSourceLink]) -> [ChatRelatedLink] {
+        sourceLinks.map { source in
+            let trimmedType = source.linkType.trimmingCharacters(in: .whitespacesAndNewlines)
+            let typePrefix = trimmedType.isEmpty ? "" : "[\(trimmedType.uppercased())] "
+            let noteSuffix = (source.note?.isEmpty == false) ? " • \(source.note!)" : ""
+            return ChatRelatedLink(
+                title: "\(typePrefix)\(source.title)\(noteSuffix)",
+                urlString: source.href
+            )
+        }
+    }
+
     private func normalizedInternalURLString(from href: String) -> String {
         let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
@@ -681,21 +756,24 @@ final class ChatManager: ObservableObject {
             .replacingOccurrences(of: "\\n", with: "\n")
             .replacingOccurrences(of: "\r\n", with: "\n")
 
-        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: normalizedText) : normalizedText
+        let (textWithoutSources, sourceLinks) = extractSourcesBlock(from: normalizedText)
+        let relatedSourceLinks = chatRelatedLinks(from: sourceLinks)
+        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: textWithoutSources) : textWithoutSources
 
         guard preserveStructure else {
+            let inlineLinks = extractMarkdownLinks(from: expandedText).map {
+                ChatRelatedLink(
+                    title: $0.title,
+                    urlString: $0.href
+                )
+            }
             return [
                 ChatDisplayBlock(
                     kind: .paragraph,
                     plainText: expandedText,
                     attributedText: makeInlineMarkdown(expandedText, enabled: enableInlineMarkdown),
                     tableData: nil,
-                    relatedLinks: extractMarkdownLinks(from: expandedText).map {
-                        ChatRelatedLink(
-                            title: $0.title,
-                            urlString: $0.href
-                        )
-                    }
+                    relatedLinks: inlineLinks + relatedSourceLinks
                 )
             ]
         }
@@ -718,19 +796,19 @@ final class ChatManager: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !paragraph.isEmpty {
-                let relatedLinks = extractMarkdownLinks(from: paragraph)
+                let relatedLinks = extractMarkdownLinks(from: paragraph).map {
+                    ChatRelatedLink(
+                        title: $0.title,
+                        urlString: $0.href
+                    )
+                }
                 result.append(
                     ChatDisplayBlock(
                         kind: .paragraph,
                         plainText: paragraph,
                         attributedText: makeInlineMarkdown(paragraph, enabled: enableInlineMarkdown),
                         tableData: nil,
-                        relatedLinks: relatedLinks.map {
-                            ChatRelatedLink(
-                                title: $0.title,
-                                urlString: $0.href
-                            )
-                        }
+                        relatedLinks: relatedLinks
                     )
                 )
             }
@@ -817,20 +895,44 @@ final class ChatManager: ObservableObject {
         flushParagraph()
 
         if result.isEmpty {
+            let inlineLinks = extractMarkdownLinks(from: expandedText).map {
+                ChatRelatedLink(
+                    title: $0.title,
+                    urlString: $0.href
+                )
+            }
             return [
                 ChatDisplayBlock(
                     kind: .paragraph,
                     plainText: expandedText,
                     attributedText: makeInlineMarkdown(expandedText, enabled: enableInlineMarkdown),
                     tableData: nil,
-                    relatedLinks: extractMarkdownLinks(from: expandedText).map {
-                        ChatRelatedLink(
-                            title: $0.title,
-                            urlString: $0.href
-                        )
-                    }
+                    relatedLinks: inlineLinks + relatedSourceLinks
                 )
             ]
+        }
+
+        if !relatedSourceLinks.isEmpty {
+            if let lastParagraphIndex = result.lastIndex(where: { $0.kind == .paragraph || $0.kind == .bullet }) {
+                let block = result[lastParagraphIndex]
+                result[lastParagraphIndex] = ChatDisplayBlock(
+                    kind: block.kind,
+                    plainText: block.plainText,
+                    attributedText: block.attributedText,
+                    tableData: block.tableData,
+                    relatedLinks: (block.relatedLinks ?? []) + relatedSourceLinks
+                )
+            } else {
+                result.append(
+                    ChatDisplayBlock(
+                        kind: .paragraph,
+                        plainText: "",
+                        attributedText: nil,
+                        tableData: nil,
+                        relatedLinks: relatedSourceLinks
+                    )
+                )
+            }
         }
 
         return result

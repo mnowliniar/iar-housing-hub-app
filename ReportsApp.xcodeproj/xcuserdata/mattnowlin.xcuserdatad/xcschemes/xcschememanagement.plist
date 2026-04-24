@@ -7,17 +7,45 @@
 		<key>IAR Housing Hub WidgetsExtension.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>1</integer>
+			<integer>0</integer>
 		</dict>
 		<key>ReportsApp.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>0</integer>
+			<integer>2</integer>
 		</dict>
 		<key>ReportsWatchApp Watch App.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>0</integer>
+			<integer>1</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>71861BA02E5E2EEA00F5F133</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>71B9466A2F6B0C3500BBC3B2</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>71F09F252E5FE8E50086B5C3</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>71F09F312E5FE8E70086B5C3</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>71F09F3B2E5FE8E70086B5C3</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>

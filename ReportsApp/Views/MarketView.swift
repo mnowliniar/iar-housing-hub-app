@@ -13,6 +13,7 @@ import LinkPresentation
 struct MarketView: View {
     let geoID: Int
     @EnvironmentObject var app: AppState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showGeoPicker = false
     @State private var activeGeo: Geo?
     @State private var isLoadingGeo = false
@@ -31,6 +32,9 @@ struct MarketView: View {
                     .padding(.horizontal, 16)
 
                 MarketDashboardSection(geoID: String(geoID))
+                    .frame(maxWidth: .infinity, minHeight: dashboardMinHeight, alignment: .top)
+                    .layoutPriority(1)
+                    .padding(.bottom, 8)
 
                 HStack {
                     Text("Insights")
@@ -121,6 +125,11 @@ struct MarketView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
+    }
+
+    private var dashboardMinHeight: CGFloat? {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return nil }
+        return horizontalSizeClass == .regular ? 380 : 420
     }
 
     private var insightsSection: some View {
@@ -237,6 +246,18 @@ struct MarketView: View {
         return components.url
     }
 
+    private func supportsInsightViz(_ type: String?) -> Bool {
+        guard let type else { return false }
+        return [
+            "weekly_wow",
+            "weekly_recent3_yoy",
+            "weekly_trend_yoy",
+            "weekly_elbow",
+            "price_breakout_yoy",
+            "monthly_yoy"
+        ].contains(type)
+    }
+
     private var insightSkeletonCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             RoundedRectangle(cornerRadius: 4)
@@ -307,15 +328,34 @@ struct MarketView: View {
 
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
-
-                if insight.type == "weekly_wow" {
+                if insight.type == "weekly_elbow" {
+                    WeeklyElbowInsightChartView(
+                        points: WeeklyElbowInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_recent3_yoy" {
+                    WeeklyRecent3YoYInsightChartView(
+                        points: WeeklyRecent3YoYInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_trend_yoy" {
+                    WeeklyTrendYoYInsightChartView(
+                        points: WeeklyTrendYoYInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_wow" {
                     WeeklyWowInsightChartView(
                         points: WeeklyWowInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
                         unit: vizData.unit
                     )
                     .frame(height: 220)
-
                 } else if insight.type == "price_breakout_yoy" {
                     PriceBreakoutInsightChartView(
                         points: PriceBreakoutInsightChartParser.parse(vizData.chartData, bucket: vizData.bucket),
@@ -399,7 +439,7 @@ struct MarketView: View {
         var loaded: [Int: InsightVizData] = [:]
 
         for insight in insights.prefix(5) {
-            guard (insight.type == "weekly_wow" || insight.type == "price_breakout_yoy" || insight.type == "monthly_yoy"),
+            guard supportsInsightViz(insight.type),
                   let instanceID = insight.sourceID else { continue }
 
             if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket) {
@@ -513,6 +553,18 @@ struct InsightsView: View {
         }
     }
 
+    private func supportsInsightViz(_ type: String?) -> Bool {
+        guard let type else { return false }
+        return [
+            "weekly_wow",
+            "weekly_recent3_yoy",
+            "weekly_trend_yoy",
+            "weekly_elbow",
+            "price_breakout_yoy",
+            "monthly_yoy"
+        ].contains(type)
+    }
+
     private var insightSkeletonCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             RoundedRectangle(cornerRadius: 4)
@@ -582,7 +634,30 @@ struct InsightsView: View {
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
 
-                if insight.type == "weekly_wow" {
+                if insight.type == "weekly_elbow" {
+                    WeeklyElbowInsightChartView(
+                        points: WeeklyElbowInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+
+                } else if insight.type == "weekly_recent3_yoy" {
+                    WeeklyRecent3YoYInsightChartView(
+                        points: WeeklyRecent3YoYInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+
+                } else if insight.type == "weekly_trend_yoy" {
+                    WeeklyTrendYoYInsightChartView(
+                        points: WeeklyTrendYoYInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_wow" {
                     WeeklyWowInsightChartView(
                         points: WeeklyWowInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
@@ -686,7 +761,7 @@ struct InsightsView: View {
         var loaded: [Int: InsightVizData] = [:]
 
         for insight in insights {
-            guard (insight.type == "weekly_wow" || insight.type == "price_breakout_yoy" || insight.type == "monthly_yoy"),
+            guard supportsInsightViz(insight.type),
                   let instanceID = insight.sourceID else { continue }
 
             if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket) {

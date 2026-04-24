@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import Foundation
 
 struct WeeklyWowPoint: Identifiable {
     let id = UUID()
@@ -13,8 +14,18 @@ struct WeeklyWowInsightChartView: View {
     let format: String?
     let unit: String?
 
+    private var chartPoints: [WeeklyWowPoint] {
+        points.map { point in
+            WeeklyWowPoint(
+                date: point.date,
+                actual: point.actual.map { ChartValueFormatter.scale($0, format: format, unit: unit) },
+                estimated: point.estimated.map { ChartValueFormatter.scale($0, format: format, unit: unit) }
+            )
+        }
+    }
+
     private var actualPoints: [WeeklyWowPoint] {
-        let filtered = points.filter { $0.actual != nil }
+        let filtered = chartPoints.filter { $0.actual != nil }
         return Array(filtered.suffix(12))
     }
 
@@ -185,21 +196,7 @@ struct WeeklyWowInsightChartView: View {
     }
 
     private func formatValue(_ value: Double) -> String {
-        let rounded = value.rounded()
-
-        if format == "$" {
-            return "$" + Int(rounded).formatted()
-        }
-
-        if abs(rounded) >= 1000 {
-            return Int(rounded).formatted()
-        }
-
-        if rounded == floor(rounded) {
-            return String(Int(rounded))
-        }
-
-        return String(format: "%.1f", rounded)
+        ChartValueFormatter.label(value, format: format, unit: unit)
     }
 }
 
@@ -223,7 +220,7 @@ enum WeeklyWowInsightChartParser {
 
             return WeeklyWowPoint(
                 date: date,
-                actual: actual,
+                actual: estimated,
                 estimated: estimated
             )
         }

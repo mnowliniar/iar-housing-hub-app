@@ -93,7 +93,7 @@ struct MarketDashboardSection: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .frame(height: 420)
+        .frame(height: 300)
     }
 
     @ViewBuilder
@@ -119,7 +119,7 @@ struct MarketDashboardSection: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-            .frame(height: 420)
+            .frame(height: 300)
         } else {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(tiles) { tile in

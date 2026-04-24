@@ -13,7 +13,7 @@ struct AuthExchangeResponse: Decodable {
     let accessToken: String
     let tokenType: String
     let expiresAt: String
-    let wpUserId: Int
+    let wpUserId: String
     let chatUserID: String?
 
     enum CodingKeys: String, CodingKey {
@@ -30,7 +30,7 @@ struct AuthSession: Codable {
     let accessToken: String
     let tokenType: String
     let expiresAt: Date
-    let wpUserId: Int
+    let wpUserId: String
     let chatUserID: String?
     var isExpired: Bool {
         Date() >= expiresAt

@@ -105,8 +105,11 @@ final class AuthManager: ObservableObject {
         let body = ["code": code]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
+        var responseData: Data?
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
+            responseData = data
 
             guard let http = response as? HTTPURLResponse else {
                 state = .error("No server response")
@@ -140,6 +143,8 @@ final class AuthManager: ObservableObject {
             self.state = .signedIn
             onSignedIn?()
         } catch {
+            print("[Auth] exchange decode error:", error)
+            print("[Auth] raw response:", responseData.flatMap { String(data: $0, encoding: .utf8) } ?? "nil")
             state = .error("Sign-in failed")
         }
     }

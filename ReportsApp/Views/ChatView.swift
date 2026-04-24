@@ -747,7 +747,17 @@ private enum RelatedLinkKind {
     case report
     case link
 
-    init(urlString: String) {
+    init(label: String?, urlString: String) {
+        let normalizedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedLabel == "chart" {
+            self = .chart
+            return
+        }
+        if normalizedLabel == "report" {
+            self = .report
+            return
+        }
+
         let lower = urlString.lowercased()
         if lower.contains("reports/viz/") {
             self = .chart
@@ -785,9 +795,43 @@ private enum RelatedLinkKind {
         case .chart:
             return BrandColors.teal
         case .report:
-            return Color(hex: "#433277")
+            return BrandColors.teal
         case .link:
-            return Color(hex: "#e77c05")
+            return BrandColors.teal
+        }
+    }
+}
+
+private struct ParsedRelatedLinkPresentation {
+    let label: String?
+    let title: String
+    let note: String?
+
+    init(linkTitle: String) {
+        let trimmed = linkTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var working = trimmed
+        var parsedLabel: String?
+
+        if working.hasPrefix("["), let close = working.firstIndex(of: "]") {
+            let labelStart = working.index(after: working.startIndex)
+            let rawLabel = String(working[labelStart..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !rawLabel.isEmpty {
+                parsedLabel = rawLabel
+            }
+            working = String(working[working.index(after: close)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if let separatorRange = working.range(of: " • ", options: .backwards) {
+            let left = String(working[..<separatorRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let right = String(working[separatorRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            self.label = parsedLabel
+            self.title = left.isEmpty ? trimmed : left
+            self.note = right.isEmpty ? nil : right
+        } else {
+            self.label = parsedLabel
+            self.title = working.isEmpty ? trimmed : working
+            self.note = nil
         }
     }
 }
@@ -812,8 +856,12 @@ private struct RelatedLinksView: View {
 private struct RelatedLinkCard: View {
     let link: ChatRelatedLink
 
+    private var parsed: ParsedRelatedLinkPresentation {
+        ParsedRelatedLinkPresentation(linkTitle: link.title)
+    }
+
     private var kind: RelatedLinkKind {
-        RelatedLinkKind(urlString: link.urlString)
+        RelatedLinkKind(label: parsed.label, urlString: link.urlString)
     }
 
     private var hostLabel: String {
@@ -832,16 +880,27 @@ private struct RelatedLinkCard: View {
                 )
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(link.title)
+                Text(parsed.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
-                    Text(kind.title)
+                    Text(parsed.label?.uppercased() ?? kind.title.uppercased())
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(kind.tint)
+
+                    if let note = parsed.note, !note.isEmpty {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
                     Text("•")
                         .font(.caption)

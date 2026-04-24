@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import Foundation
 
 struct MonthlyYoYPoint: Identifiable {
     let id = UUID()
@@ -59,8 +60,18 @@ struct MonthlyYoYInsightChartView: View {
     let format: String?
     let unit: String?
 
+    private var chartPoints: [MonthlyYoYPoint] {
+        points.map { point in
+            MonthlyYoYPoint(
+                date: point.date,
+                value: ChartValueFormatter.scale(point.value, format: format, unit: unit),
+                yoyValue: point.yoyValue.map { ChartValueFormatter.scale($0, format: format, unit: unit) }
+            )
+        }
+    }
+
     private var displayPoints: [MonthlyYoYPoint] {
-        Array(points.suffix(13))
+        Array(chartPoints.suffix(13))
     }
 
     private var currentValue: Double? {
@@ -209,20 +220,6 @@ struct MonthlyYoYInsightChartView: View {
     }
 
     private func formatValue(_ value: Double) -> String {
-        let rounded = value.rounded()
-
-        if format == "$" {
-            return "$" + Int(rounded).formatted()
-        }
-
-        if abs(rounded) >= 1000 {
-            return Int(rounded).formatted()
-        }
-
-        if rounded == floor(rounded) {
-            return String(Int(rounded))
-        }
-
-        return String(format: "%.1f", rounded)
+        ChartValueFormatter.label(value, format: format, unit: unit)
     }
 }

@@ -7,6 +7,7 @@
 
 
 import SwiftUI
+import Foundation
 
 struct PriceBreakoutPoint: Identifiable {
     let id = UUID()
@@ -63,22 +64,33 @@ struct PriceBreakoutInsightChartView: View {
     let format: String?
     let unit: String?
 
+    private var chartPoints: [PriceBreakoutPoint] {
+        points.map { point in
+            PriceBreakoutPoint(
+                label: point.label,
+                current: ChartValueFormatter.scale(point.current, format: format, unit: unit),
+                previous: ChartValueFormatter.scale(point.previous, format: format, unit: unit),
+                isHighlighted: point.isHighlighted
+            )
+        }
+    }
+
     private var xMin: Double {
-        let minValue = points
+        let minValue = chartPoints
             .flatMap { [$0.current, $0.previous] }
             .min() ?? 0
         return minValue * 0.9
     }
 
     private var xMax: Double {
-        let maxValue = points
+        let maxValue = chartPoints
             .flatMap { [$0.current, $0.previous] }
             .max() ?? 100
         return maxValue * 1.12
     }
 
     private var hasNegativeHighlightedChange: Bool {
-        points.contains { point in
+        chartPoints.contains { point in
             point.isHighlighted && ((point.current / point.previous) - 1) * 100 < 0
         }
     }
@@ -123,7 +135,7 @@ struct PriceBreakoutInsightChartView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(points) { point in
+                        ForEach(chartPoints) { point in
                             rowView(
                                 point: point,
                                 plotWidth: plotWidth,
@@ -228,13 +240,7 @@ struct PriceBreakoutInsightChartView: View {
     }
 
     private func formatValue(_ value: Double) -> String {
-        let rounded = Int(value.rounded())
-
-        if format == "$" {
-            return "$" + rounded.formatted()
-        }
-
-        return rounded.formatted()
+        ChartValueFormatter.label(value, format: format, unit: unit)
     }
 
     private func calculatedPercentChange(for point: PriceBreakoutPoint) -> Double? {
