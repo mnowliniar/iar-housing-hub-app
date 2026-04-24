@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReportBuilderView: View {
     let report: Report
+    var onViewReport: ((ActiveReport) -> Void)? = nil
 
     @State private var geoTypes: [String] = []
     @State private var selectedGeoType: String?
@@ -48,14 +49,25 @@ struct ReportBuilderView: View {
 
             if let selectedGeo = selectedGeo, let selectedDate = selectedDate {
                 Section {
-                    NavigationLink("View Report") {
-                        ReportDetailView(
-                            report: report,
-                            geo: selectedGeo,
-                            updateDate: selectedDate.update_date_only
-                        )
+                    if let onViewReport {
+                        Button("View Report") {
+                            onViewReport(ActiveReport(
+                                report: report,
+                                geo: selectedGeo,
+                                updateDate: selectedDate.update_date_only
+                            ))
+                        }
+                        .font(.headline)
+                    } else {
+                        NavigationLink("View Report") {
+                            ReportDetailView(
+                                report: report,
+                                geo: selectedGeo,
+                                updateDate: selectedDate.update_date_only
+                            )
+                        }
+                        .font(.headline)
                     }
-                    .font(.headline)
                 }
             }
         }

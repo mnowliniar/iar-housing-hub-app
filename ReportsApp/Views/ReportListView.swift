@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ReportListView: View {
+    var onViewReport: ((ActiveReport) -> Void)? = nil
     @State private var reportsByCategory: [String: [Report]] = [:]
 
     var body: some View {
@@ -9,7 +10,7 @@ struct ReportListView: View {
                 ForEach(reportsByCategory.keys.sorted(), id: \.self) { category in
                     Section(header: Text(category)) {
                         ForEach(reportsByCategory[category] ?? []) { report in
-                            NavigationLink(destination: ReportBuilderView(report: report)) {
+                            NavigationLink(destination: ReportBuilderView(report: report, onViewReport: onViewReport)) {
                                 ReportCardView(report: report)
                             }
                         }

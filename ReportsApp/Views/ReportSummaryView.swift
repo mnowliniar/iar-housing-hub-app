@@ -25,7 +25,7 @@ struct ReportSummaryView: View {
     var body: some View {
         ScrollView {
             if let summary = summary {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: hSize == .regular ? 20 : 12) {
                     // Title area
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .top) {
@@ -64,7 +64,7 @@ struct ReportSummaryView: View {
                             .accessibilityLabel("Report actions")
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, hSize == .regular ? 32 : 16)
 
                     Divider()
 
@@ -92,7 +92,7 @@ struct ReportSummaryView: View {
                                    }
                                    // BELOW CHART (supporting chips)
                                    Divider().padding(.vertical, 4)
-                                   LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 8)], spacing: 8) {
+                                   VStack(spacing: 8) {
                                        if let label1 = viz.fact1label, let val1 = viz.fact1 {
                                            StatChip(label: label1, value: val1, expected: viz.exp1)
                                        }
@@ -106,7 +106,7 @@ struct ReportSummaryView: View {
                         .glassCard()
                         .cornerRadius(12)
                         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
-                        .padding(.horizontal)
+                        .padding(.horizontal, hSize == .regular ? 32 : 16)
                     }
                 }
             } else if isLoading {
@@ -657,8 +657,8 @@ struct DataChartView: View {
             return 0...1
         }
         // Bar chart types should start at zero for honest bar lengths
-        let isBar = (type == "barGrouped" || type == "barWeek")
-        let lo = isBar ? 0.0 : loRaw
+        let isBar = (type == "barGrouped" || type == "barWeek" || type == "barCat")
+        let lo = isBar ? min(0.0, loRaw) : loRaw
         let hi = max(hiRaw, lo) // ensure non-negative span
         let span = max(hi - lo, 1e-9)
         let padLo = isBar ? 0.0 : span * 0.02

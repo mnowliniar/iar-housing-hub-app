@@ -97,6 +97,13 @@ struct UserPrefsService {
     }
 }
 
+struct ActiveReport: Identifiable {
+    var id: String { "\(report.id)-\(geo.geoid)-\(updateDate)" }
+    let report: Report
+    let geo: Geo
+    let updateDate: String
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var userPrefs = UserPrefs()
@@ -104,6 +111,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Int = 0
     @Published var sparkPrompt: String? = nil
     @Published var insightGeoID: String? = nil
+    @Published var activeReport: ActiveReport? = nil
 
     private let prefsService = UserPrefsService()
 
