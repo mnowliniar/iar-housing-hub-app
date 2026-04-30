@@ -10,6 +10,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var app: AppState
+    @EnvironmentObject var auth: AuthManager
     @State private var showDeepLinkedInsights = false
     var body: some View {
         ScrollView {
@@ -27,6 +28,13 @@ struct HomeView: View {
                 BlogRail()
                 // 3) Reports section
                 ReportsRail()
+
+                Button("Sign out") {
+                    auth.logout()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 8)
             }
             .padding(.vertical, 4)
         }

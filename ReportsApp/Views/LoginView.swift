@@ -56,5 +56,9 @@ struct LoginView: View {
                     .padding(.bottom, 20)
             }
         }
+        .sheet(isPresented: $auth.showLoginSheet) {
+            SafariView(url: auth.loginStartURL)
+                .ignoresSafeArea()
+        }
     }
 }
