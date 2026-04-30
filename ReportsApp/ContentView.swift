@@ -50,6 +50,11 @@ struct ContentView: View {
                     }
                     .tag(2)
                 }
+                .fullScreenCover(item: $app.activeReport) { active in
+                    NavigationStack {
+                        ReportDetailView(report: active.report, geo: active.geo, updateDate: active.updateDate)
+                    }
+                }
 
                 if showReportsDrawer {
                     Color.black.opacity(0.2)
@@ -64,9 +69,12 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     if showReportsDrawer {
                         NavigationStack {
-                            ReportListView()
-                                .navigationTitle("Reports")
-                                .environment(\.horizontalSizeClass, .compact)
+                            ReportListView(onViewReport: { active in
+                                app.activeReport = active
+                                withAnimation { showReportsDrawer = false }
+                            })
+                            .navigationTitle("Reports")
+                            .environment(\.horizontalSizeClass, .compact)
                         }
                         .frame(width: 320)
                         .background(.regularMaterial)
