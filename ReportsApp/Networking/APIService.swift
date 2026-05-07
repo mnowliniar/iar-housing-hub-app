@@ -20,6 +20,7 @@ struct InsightPreviewResponse: Decodable {
     }
 }
 struct InsightPreviewItem: Decodable, Identifiable {
+    let id: UUID = UUID()
     let score: Double?
     let type: String?
     let geoID: Int?
@@ -44,10 +45,6 @@ struct InsightPreviewItem: Decodable, Identifiable {
     let unit: String?
     let format: String?
     let sourceID: Int?
-
-    var id: String {
-        sourceID.map(String.init) ?? headline ?? title ?? viz ?? geo ?? UUID().uuidString
-    }
 
     enum CodingKeys: String, CodingKey {
         case score
