@@ -8,12 +8,12 @@
 
 import Foundation
 import SwiftUI
-import UIKit
 
 @MainActor
 final class AuthManager: ObservableObject {
     @Published var state: AuthState = .launching
     @Published var session: AuthSession?
+    @Published var showLoginSheet = false
 
     private let sessionAccount = "auth_session"
     var onSignedIn: (() -> Void)?
@@ -65,11 +65,11 @@ final class AuthManager: ObservableObject {
     }
 
     func startLogin() {
-        state = .signingIn
-        UIApplication.shared.open(loginStartURL)
+        showLoginSheet = true
     }
 
     func handleIncomingURL(_ url: URL) {
+        showLoginSheet = false
         guard url.scheme?.lowercased() == "iarhousinghub" else { return }
         guard url.host == "auth" else { return }
         guard url.path == "/callback" else { return }
