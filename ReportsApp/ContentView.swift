@@ -97,7 +97,6 @@ struct ContentView: View {
 
                 NavigationStack {
                     ReportListView()
-                        .navigationTitle("Reports")
                 }
                 .tabItem {
                     Label("Reports", systemImage: "doc.text")
