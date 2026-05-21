@@ -736,9 +736,61 @@ private struct RichChatText: View {
                     if let table = block.tableData {
                         ChatTableView(table: table)
                     }
+                case .contentCard:
+                    if let card = block.contentCardData {
+                        ContentCardView(card: card)
+                    }
                 }
             }
         }
+    }
+}
+
+private struct ContentCardView: View {
+    let card: ContentCardData
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: card.systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(BrandColors.teal)
+                Text(card.heading)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = card.content
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                } label: {
+                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(copied ? .secondary : BrandColors.teal)
+                }
+                .buttonStyle(.plain)
+                .animation(.easeInOut(duration: 0.15), value: copied)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(.systemGray6))
+
+            Divider()
+
+            Text(card.content)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(.systemGray4), lineWidth: 1)
+        )
     }
 }
 

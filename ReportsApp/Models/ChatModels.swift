@@ -28,8 +28,30 @@ enum ChatDisplayBlockKind: Equatable {
     case paragraph
     case bullet
     case table
+    case contentCard
 }
 
+struct ContentCardData: Equatable {
+    let kind: String  // "post", "email", "script"
+    let content: String
+
+    var heading: String {
+        switch kind {
+        case "post": return "Here's your post"
+        case "email": return "Here's your email"
+        case "script": return "Here's your script"
+        default: return "Here's your content"
+        }
+    }
+
+    var systemImage: String {
+        switch kind {
+        case "email": return "envelope"
+        case "script": return "text.alignleft"
+        default: return "sparkles"
+        }
+    }
+}
 
 struct ChatTableData: Equatable {
     let headers: [String]
@@ -48,6 +70,23 @@ struct ChatDisplayBlock: Identifiable, Equatable {
     let attributedText: AttributedString?
     let tableData: ChatTableData?
     let relatedLinks: [ChatRelatedLink]?
+    let contentCardData: ContentCardData?
+
+    init(
+        kind: ChatDisplayBlockKind,
+        plainText: String,
+        attributedText: AttributedString?,
+        tableData: ChatTableData?,
+        relatedLinks: [ChatRelatedLink]?,
+        contentCardData: ContentCardData? = nil
+    ) {
+        self.kind = kind
+        self.plainText = plainText
+        self.attributedText = attributedText
+        self.tableData = tableData
+        self.relatedLinks = relatedLinks
+        self.contentCardData = contentCardData
+    }
 }
 
 struct BackendChatMessage: Decodable {

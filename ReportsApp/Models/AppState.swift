@@ -112,6 +112,7 @@ final class AppState: ObservableObject {
     @Published var sparkPrompt: String? = nil
     @Published var insightGeoID: String? = nil
     @Published var activeReport: ActiveReport? = nil
+    @Published var showDigest: Bool = false
 
     private let prefsService = UserPrefsService()
 
@@ -158,6 +159,12 @@ final class AppState: ObservableObject {
             let query = components?.queryItems?.first(where: { $0.name == "q" })?.value
             sparkPrompt = query
             selectedTab = 2
+            return
+        }
+
+        if url.host == "digest" {
+            showDigest = true
+            selectedTab = 1
             return
         }
 
