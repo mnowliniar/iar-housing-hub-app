@@ -70,6 +70,7 @@ struct FavoriteMarketsRail: View {
     @EnvironmentObject var app: AppState
     @State private var geoLookup: [Int: Geo] = [:]
     @State private var showMarketPicker = false
+    @State private var showNotificationRationale = false
 
     private var favoriteMarketIDs: [Int] {
         app.userPrefs.app.favoriteMarketIDs
@@ -121,6 +122,10 @@ struct FavoriteMarketsRail: View {
                     addMarket(geo)
                 }
             )
+        }
+        .sheet(isPresented: $showNotificationRationale) {
+            NotificationRationaleSheet(isPresented: $showNotificationRationale)
+                .presentationDetents([.medium])
         }
     }
 
@@ -193,6 +198,13 @@ struct FavoriteMarketsRail: View {
         app.userPrefs.app.favoriteMarketIDs = ids
         geoLookup[geo.geoid] = geo
         app.saveUserPrefs()
+        NotificationScheduler.isUndetermined { undetermined in
+            if undetermined {
+                showNotificationRationale = true
+            } else {
+                NotificationScheduler.requestAndSchedule()
+            }
+        }
     }
 
     private func loadFavoriteGeos() async {
@@ -779,6 +791,7 @@ struct ReportsRail: View {
 struct ReportCard: View {
     let item: ReportListItem
     @EnvironmentObject var app: AppState
+    @State private var showNotificationRationale = false
 
     private var isFavorite: Bool {
         app.userPrefs.app.favoriteReportIDs.contains(item.report_id)
@@ -786,6 +799,7 @@ struct ReportCard: View {
 
     private func toggleFavorite() {
         var ids = app.userPrefs.app.favoriteReportIDs
+        let wasAdding = !ids.contains(item.report_id)
         if ids.contains(item.report_id) {
             ids.removeAll { $0 == item.report_id }
         } else if ids.count < 3 {
@@ -793,6 +807,15 @@ struct ReportCard: View {
         }
         app.userPrefs.app.favoriteReportIDs = ids
         app.saveUserPrefs()
+        if wasAdding {
+            NotificationScheduler.isUndetermined { undetermined in
+                if undetermined {
+                    showNotificationRationale = true
+                } else {
+                    NotificationScheduler.requestAndSchedule()
+                }
+            }
+        }
     }
 
     private func formattedUpdate(_ s: String) -> String {
@@ -866,6 +889,61 @@ struct ReportCard: View {
             }
             .buttonStyle(.plain)
         }
+        .sheet(isPresented: $showNotificationRationale) {
+            NotificationRationaleSheet(isPresented: $showNotificationRationale)
+                .presentationDetents([.medium])
+        }
+    }
+}
+
+private struct NotificationRationaleSheet: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "bell.badge")
+                .font(.system(size: 52))
+                .foregroundStyle(BrandColors.teal)
+
+            VStack(spacing: 10) {
+                Text("Stay on Top of Your Markets")
+                    .font(.title2.weight(.bold))
+                    .multilineTextAlignment(.center)
+
+                Text("We'll send you a reminder every Thursday and on the 7th of each month so you never miss a digest update.\n\nTap **Allow** when iOS asks.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                Button {
+                    isPresented = false
+                    NotificationScheduler.requestAndSchedule()
+                } label: {
+                    Text("Enable Notifications")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(BrandColors.teal)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                Button("Not Now") {
+                    isPresented = false
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+        .padding(.horizontal, 24)
     }
 }
 

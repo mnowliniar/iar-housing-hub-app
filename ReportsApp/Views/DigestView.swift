@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct DigestView: View {
     @EnvironmentObject var app: AppState
@@ -29,6 +30,22 @@ struct DigestView: View {
         }
         .navigationTitle("My Digest")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Test Notification") {
+                    let isWeekly = Bool.random()
+                    let content = UNMutableNotificationContent()
+                    content.title = isWeekly ? "Your Weekly Digest" : "Your Monthly Digest"
+                    content.body = "Your Indiana housing market digest is ready."
+                    content.sound = .default
+                    content.userInfo = ["destination": "digest"]
+                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+                    let request = UNNotificationRequest(identifier: "digest.test", content: content, trigger: trigger)
+                    UNUserNotificationCenter.current().add(request)
+                }
+                .font(.caption)
+            }
+        }
         .task { await load() }
         .refreshable { await load() }
     }
@@ -171,6 +188,9 @@ private struct DigestMarketRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(market.label)
                     .font(.body)
+                Text(report.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if market.vizCount > 0 {
                     Text("\(market.vizCount) of \(market.vizTotal) charts")
                         .font(.caption2)
