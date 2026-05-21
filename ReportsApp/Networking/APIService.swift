@@ -244,4 +244,50 @@ struct APIService {
         let decoded = try JSONDecoder().decode(LatestDateResponse.self, from: data)
         return decoded.date
     }
+
+    static func fetchDigest() async -> DigestResponse? {
+        guard let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty else {
+            return nil
+        }
+        var comps = URLComponents(string: "https://data.indianarealtors.com/app/digest/")!
+        comps.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        guard let url = comps.url else { return nil }
+        print("[Digest] requesting:", url)
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let raw = String(data: data, encoding: .utf8) {
+                print("[Digest] raw response:", raw.prefix(200))
+            }
+            return try JSONDecoder().decode(DigestResponse.self, from: data)
+        } catch {
+            print("❌ Error fetching digest: \(error)")
+            return nil
+        }
+    }
+
+    static func toggleDigestSubscription(geoID: String, reportID: Int, proptype: String) async -> Bool {
+        guard let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty else {
+            return false
+        }
+        var comps = URLComponents(string: "https://data.indianarealtors.com/app/digest/subscribe/")!
+        comps.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        guard let url = comps.url else { return false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "geo_id": geoID,
+            "report_id": reportID,
+            "proptype": proptype
+        ])
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            return json?["subscribed"] as? Bool ?? false
+        } catch {
+            print("❌ Error toggling digest subscription: \(error)")
+            return false
+        }
+    }
 }
