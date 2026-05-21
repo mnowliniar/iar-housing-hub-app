@@ -633,6 +633,33 @@ final class ChatManager: ObservableObject {
         let note: String?
     }
 
+    private func extractContentCards(from text: String) -> (cleanedText: String, cards: [ContentCardData]) {
+        let pattern = #"```(post|email|script)\s*\n([\s\S]*?)```"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return (text, [])
+        }
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        let matches = regex.matches(in: text, range: range)
+        if matches.isEmpty { return (text, []) }
+
+        var cards: [ContentCardData] = []
+        for match in matches {
+            guard match.numberOfRanges >= 3,
+                  let kindRange = Range(match.range(at: 1), in: text),
+                  let contentRange = Range(match.range(at: 2), in: text) else { continue }
+            let kind = String(text[kindRange]).lowercased()
+            let rawContent = String(text[contentRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let content = rawContent
+                .replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "$1", options: .regularExpression)
+                .replacingOccurrences(of: #"\*(.+?)\*"#, with: "$1", options: .regularExpression)
+            cards.append(ContentCardData(kind: kind, content: content))
+        }
+        let cleaned = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, cards)
+    }
+
     private func extractSourcesBlock(from text: String) -> (cleanedText: String, links: [ParsedSourceLink]) {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
         let pattern = #"```sources\s*\n([\s\S]*?)```\s*$"#
@@ -757,8 +784,9 @@ final class ChatManager: ObservableObject {
             .replacingOccurrences(of: "\r\n", with: "\n")
 
         let (textWithoutSources, sourceLinks) = extractSourcesBlock(from: normalizedText)
+        let (textWithoutCards, contentCards) = extractContentCards(from: textWithoutSources)
         let relatedSourceLinks = chatRelatedLinks(from: sourceLinks)
-        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: textWithoutSources) : textWithoutSources
+        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: textWithoutCards) : textWithoutCards
 
         guard preserveStructure else {
             let inlineLinks = extractMarkdownLinks(from: expandedText).map {
@@ -933,6 +961,17 @@ final class ChatManager: ObservableObject {
                     )
                 )
             }
+        }
+
+        for card in contentCards {
+            result.append(ChatDisplayBlock(
+                kind: .contentCard,
+                plainText: card.content,
+                attributedText: nil,
+                tableData: nil,
+                relatedLinks: nil,
+                contentCardData: card
+            ))
         }
 
         return result
