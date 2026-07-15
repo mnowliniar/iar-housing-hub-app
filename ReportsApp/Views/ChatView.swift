@@ -754,7 +754,7 @@ private struct ContentCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: card.systemImage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(BrandColors.teal)
                 Text(card.heading)
                     .font(.subheadline.weight(.semibold))

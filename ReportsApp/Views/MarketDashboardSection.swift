@@ -19,6 +19,11 @@ struct MarketDashboardSection: View {
     @State private var showLoadedTiles = false
     @State private var showSkeletonTiles = true
 
+    // Wide (regular size class) layout uses a fixed geometric grid; scale its
+    // dimensions with Dynamic Type so tile content doesn't clip at larger sizes.
+    @ScaledMetric(relativeTo: .headline) private var wideSectionHeight: CGFloat = 300
+    @ScaledMetric(relativeTo: .headline) private var wideTileMinHeight: CGFloat = 170
+
     private var vizIDs: [Int] {
         let ids = app.userPrefs.app.dashboardVizIDs
         return ids.isEmpty ? [9, 3, 7] : ids
@@ -76,7 +81,7 @@ struct MarketDashboardSection: View {
         GeometryReader { geo in
             let spacing: CGFloat = 12
             let columnWidth = (geo.size.width - spacing) / 2
-            let tileHeight = max(170, columnWidth * 0.42)
+            let tileHeight = max(wideTileMinHeight, columnWidth * 0.42)
             let featuredHeight = tileHeight * 2 + spacing
 
             HStack(alignment: .top, spacing: spacing) {
@@ -93,7 +98,7 @@ struct MarketDashboardSection: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .frame(height: 300)
+        .frame(height: wideSectionHeight)
     }
 
     @ViewBuilder
@@ -102,7 +107,7 @@ struct MarketDashboardSection: View {
             GeometryReader { geo in
                 let spacing: CGFloat = 12
                 let columnWidth = (geo.size.width - spacing) / 2
-                let tileHeight = max(170, columnWidth * 0.42)
+                let tileHeight = max(wideTileMinHeight, columnWidth * 0.42)
                 let featuredHeight = tileHeight * 2 + spacing
 
                 HStack(alignment: .top, spacing: spacing) {
@@ -119,7 +124,7 @@ struct MarketDashboardSection: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-            .frame(height: 300)
+            .frame(height: wideSectionHeight)
         } else {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(tiles) { tile in

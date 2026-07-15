@@ -282,7 +282,8 @@ struct MarketView: View {
                 .frame(width: 220, height: 14)
         }
         .padding(20)
-        .frame(width: 320, height: 400, alignment: .topLeading)
+        .frame(width: 320, alignment: .topLeading)
+        .frame(minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
@@ -305,7 +306,8 @@ struct MarketView: View {
             .buttonStyle(.plain)
         }
         .padding(20)
-        .frame(width: 320, height: 400, alignment: .topLeading)
+        .frame(width: 320, alignment: .topLeading)
+        .frame(minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
@@ -320,7 +322,7 @@ struct MarketView: View {
                 .padding(.trailing, 28)
 
             Text(capitalizedInsightHeadline(insight))
-                .font(.system(size: 24, weight: .bold, design: .default))
+                .font(.title2.weight(.bold))
                 .foregroundStyle(.primary)
                 .lineSpacing(2)
                 .lineLimit(3)
@@ -382,7 +384,7 @@ struct MarketView: View {
             }
 
             Text("Source: Indiana Association of REALTORS®")
-                .font(.system(size: 10, weight: .regular))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -395,7 +397,7 @@ struct MarketView: View {
 
             VStack(spacing: 10) {
                 Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 34))
+                    .font(.largeTitle)
                     .foregroundStyle(BrandColors.teal)
 
                 Text(insight.type?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Insight chart")
@@ -425,6 +427,7 @@ struct MarketView: View {
             .frame(width: 320, height: 400, alignment: .topLeading)
             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .preferredColorScheme(.light)
+            .environment(\.dynamicTypeSize, .large)
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = UIScreen.main.scale
@@ -625,7 +628,7 @@ struct InsightsView: View {
                 .padding(.trailing, 28)
 
             Text(capitalizedInsightHeadline(insight))
-                .font(.system(size: 24, weight: .bold, design: .default))
+                .font(.title2.weight(.bold))
                 .foregroundStyle(.primary)
                 .lineSpacing(2)
                 .lineLimit(3)
@@ -691,7 +694,7 @@ struct InsightsView: View {
             }
 
             Text("Source: Indiana Association of REALTORS®")
-                .font(.system(size: 10, weight: .regular))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -704,7 +707,7 @@ struct InsightsView: View {
 
             VStack(spacing: 10) {
                 Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 34))
+                    .font(.largeTitle)
                     .foregroundStyle(BrandColors.teal)
 
                 Text(insight.type?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Insight chart")
@@ -734,6 +737,7 @@ struct InsightsView: View {
             .frame(width: 320, height: 400, alignment: .topLeading)
             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .preferredColorScheme(.light)
+            .environment(\.dynamicTypeSize, .large)
         
         let renderer = ImageRenderer(content: content)
         renderer.scale = UIScreen.main.scale

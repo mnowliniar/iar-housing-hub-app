@@ -161,6 +161,7 @@ struct Sparkline: View {
     let vizFormat: String?
     let trendLabel: String?
     @State private var selectedX: Int? = nil
+    @ScaledMetric(relativeTo: .caption2) private var trendLabelSize: CGFloat = 10
 
     var body: some View {
         let values = points.map { $0.value }
@@ -232,7 +233,7 @@ struct Sparkline: View {
         .overlay(alignment: .bottomLeading) {
             if let trendLabel, !trendLabel.isEmpty {
                 Text(trendLabel)
-                    .font(.system(size: 10).bold())
+                    .font(.system(size: trendLabelSize).bold())
                     .foregroundStyle(.secondary)
                     .shadow(color: Color(.systemBackground).opacity(0.98), radius: 3, x: 0, y: 0)
                     .shadow(color: Color(.systemBackground).opacity(0.98), radius: 3, x: 0, y: 0)
@@ -266,6 +267,7 @@ struct Sparkline: View {
 struct TileCard: View {
     let tile: Tile
     var showFact3Row: Bool = false
+    @ScaledMetric(relativeTo: .title) private var statFontSize: CGFloat = 32
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(tile.title).font(.headline)
@@ -281,7 +283,7 @@ struct TileCard: View {
             if let v = tile.latestValue {
                 HStack(alignment: .top, spacing: 8) {
                     Text(formattedValue(v))
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: statFontSize, weight: .bold, design: .rounded))
 
                     if let sVal = tile.fact1Value {
                         VStack(alignment: .leading, spacing: 0) {
@@ -428,7 +430,6 @@ struct MarketDashboardView: View {
                         LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
                             ForEach(tiles) { tile in
                                 TileCard(tile: tile)
-                                    .frame(height: 169)
                                     .opacity(showLoadedTiles ? 1 : 0)
                             }
                         }

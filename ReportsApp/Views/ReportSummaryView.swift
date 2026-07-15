@@ -292,6 +292,8 @@ struct FactRow: View {
 
 struct DataChartView: View {
     let chartData: [[String: JSONValue]]
+    // Grow the plot with Dynamic Type so larger axis/legend labels don't crush it.
+    @ScaledMetric(relativeTo: .body) private var chartHeight: CGFloat = 200
     let type: String
     let color: Color
     let title: String
@@ -691,7 +693,7 @@ struct DataChartView: View {
                                 .modifier(XAxisConfig(dates: dataPackage.dates, labels: dataPackage.labels))
                                 .chartLegend(.hidden)
                                 .chartYScale(domain: yDomain)
-                                .frame(width: contentWidth, height: 200)
+                                .frame(width: contentWidth, height: chartHeight)
 
                                 // Invisible anchor at the far right
                                 Color.clear.frame(width: 1, height: 1).id("end")
@@ -716,7 +718,7 @@ struct DataChartView: View {
                     .modifier(XAxisConfig(dates: dataPackage.dates, labels: dataPackage.labels))
                     .chartLegend(.visible)
                     .chartYScale(domain: yDomain)
-                    .frame(height: 200)
+                    .frame(height: chartHeight)
                 }
             }
         }

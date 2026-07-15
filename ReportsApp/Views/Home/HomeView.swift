@@ -343,6 +343,7 @@ struct FavoriteReportsRail: View {
 struct FavoriteMarketAddCard: View {
     let isDisabled: Bool
     let action: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 220
 
     var body: some View {
         Button(action: action) {
@@ -358,7 +359,8 @@ struct FavoriteMarketAddCard: View {
                 Spacer(minLength: 0)
             }
             .padding()
-            .frame(width: 220, height: 110, alignment: .topLeading)
+            .frame(width: cardWidth, alignment: .topLeading)
+        .frame(minHeight: 110, alignment: .topLeading)
             .glassCard(cornerRadius: 12, tint: BrandColors.teal)
             .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
             .opacity(isDisabled ? 0.6 : 1)
@@ -373,6 +375,7 @@ struct FavoriteMarketCard: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onRemove: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 220
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -407,7 +410,8 @@ struct FavoriteMarketCard: View {
             Spacer(minLength: 0)
         }
         .padding()
-        .frame(width: 220, height: 110, alignment: .topLeading)
+        .frame(width: cardWidth, alignment: .topLeading)
+        .frame(minHeight: 110, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -421,6 +425,7 @@ struct FavoriteMarketCard: View {
 struct FavoriteReportAddCard: View {
     let isDisabled: Bool
     let action: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 220
 
     var body: some View {
         Button(action: action) {
@@ -436,7 +441,8 @@ struct FavoriteReportAddCard: View {
                 Spacer(minLength: 0)
             }
             .padding()
-            .frame(width: 220, height: 110, alignment: .topLeading)
+            .frame(width: cardWidth, alignment: .topLeading)
+        .frame(minHeight: 110, alignment: .topLeading)
             .glassCard(cornerRadius: 12, tint: BrandColors.teal)
             .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
             .opacity(isDisabled ? 0.6 : 1)
@@ -450,6 +456,7 @@ struct FavoriteReportCard: View {
     let item: ReportListItem
     let selectedGeo: Geo?
     let onRemove: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 220
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -488,7 +495,8 @@ struct FavoriteReportCard: View {
             Spacer(minLength: 0)
         }
         .padding()
-        .frame(width: 220, height: 110, alignment: .topLeading)
+        .frame(width: cardWidth, alignment: .topLeading)
+        .frame(minHeight: 110, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         .opacity(1)
@@ -721,7 +729,8 @@ struct BlogCard: View {
                 }
             }
             .padding(cardPadding)
-            .frame(width: cardWidth, height: 300, alignment: .topLeading)
+            .frame(width: cardWidth, alignment: .topLeading)
+            .frame(minHeight: 300, alignment: .topLeading)
             .glassCard(cornerRadius: 12)
             .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         }
@@ -792,6 +801,7 @@ struct ReportCard: View {
     let item: ReportListItem
     @EnvironmentObject var app: AppState
     @State private var showNotificationRationale = false
+    @ScaledMetric(relativeTo: .headline) private var cardWidth: CGFloat = 260
 
     private var isFavorite: Bool {
         app.userPrefs.app.favoriteReportIDs.contains(item.report_id)
@@ -876,7 +886,8 @@ struct ReportCard: View {
                     Spacer(minLength: 0)
                 }
                 .padding()
-                .frame(width: 260, height: 100, alignment: .topLeading)
+                .frame(width: cardWidth, alignment: .topLeading)
+                .frame(minHeight: 100, alignment: .topLeading)
                 .glassCard(cornerRadius: 12, tint: BrandColors.teal)
                 .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
             }
@@ -898,13 +909,14 @@ struct ReportCard: View {
 
 private struct NotificationRationaleSheet: View {
     @Binding var isPresented: Bool
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 52
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
 
             Image(systemName: "bell.badge")
-                .font(.system(size: 52))
+                .font(.system(size: iconSize))
                 .foregroundStyle(BrandColors.teal)
 
             VStack(spacing: 10) {

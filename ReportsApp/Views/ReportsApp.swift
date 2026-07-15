@@ -47,6 +47,7 @@ struct ReportsApp: App {
             RootView()
                 .environmentObject(appState)
                 .environmentObject(auth)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                 .onOpenURL { url in
                     auth.handleIncomingURL(url)
                     appState.handleDeepLink(url)
