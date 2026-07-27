@@ -25,7 +25,10 @@ final class ChatManager: ObservableObject {
 
     @AppStorage("currentChatThreadID") private var storedThreadID: String = ""
 
-    private let baseURL = "https://data.indianarealtors.com"
+    /// Static so views that make their own one-off calls (one-sheet download)
+    /// share the origin instead of hardcoding a second copy.
+    static let serverBaseURL = "https://data.indianarealtors.com"
+    private let baseURL = ChatManager.serverBaseURL
     private var pollingTask: Task<Void, Never>?
 
     var threadID: String {
@@ -600,7 +603,8 @@ final class ChatManager: ObservableObject {
                     text: text,
                     payloadType: payload,
                     isEphemeral: true,
-                    displayBlocks: buildDisplayBlocks(from: text, enableInlineMarkdown: false, preserveStructure: false)
+                    displayBlocks: buildDisplayBlocks(from: text, enableInlineMarkdown: false, preserveStructure: false),
+                    progressPct: item.pct
                 )
             default:
                 return nil
@@ -633,8 +637,36 @@ final class ChatManager: ObservableObject {
         let note: String?
     }
 
+    /// Fenced blocks this client knows how to render. `chart` is included
+    /// because a separate path pulls it out before display.
+    private static let renderableFences: Set<String> = ["chart", "post", "email", "script", "sources"]
+
+    /// Drop fenced blocks meant for other clients — one-sheets, insight
+    /// payloads, download descriptors, pin lists. Without this they print as
+    /// raw JSON in the transcript, and every new block type the server learns
+    /// becomes a visual bug here. Untagged ``` blocks are left alone; those are
+    /// ordinary code fences.
+    private func stripUnknownFences(from text: String) -> String {
+        let pattern = #"```([A-Za-z][A-Za-z0-9_-]*)[ \t]*\n[\s\S]*?```"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return text
+        }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        guard !matches.isEmpty else { return text }
+
+        let mutable = NSMutableString(string: text)
+        // Reverse order so each removal leaves the earlier ranges valid.
+        for match in matches.reversed() where match.numberOfRanges >= 2 {
+            let tag = nsText.substring(with: match.range(at: 1)).lowercased()
+            if Self.renderableFences.contains(tag) { continue }
+            mutable.replaceCharacters(in: match.range(at: 0), with: "")
+        }
+        return (mutable as String).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func extractContentCards(from text: String) -> (cleanedText: String, cards: [ContentCardData]) {
-        let pattern = #"```(post|email|script)\s*\n([\s\S]*?)```"#
+        let pattern = #"```(post|email|script|onesheet)\s*\n([\s\S]*?)```"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
             return (text, [])
         }
@@ -650,9 +682,13 @@ final class ChatManager: ObservableObject {
                   let contentRange = Range(match.range(at: 2), in: text) else { continue }
             let kind = String(text[kindRange]).lowercased()
             let rawContent = String(text[contentRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let content = rawContent
-                .replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "$1", options: .regularExpression)
-                .replacingOccurrences(of: #"\*(.+?)\*"#, with: "$1", options: .regularExpression)
+            // A one-sheet's body is the spec JSON the server takes back verbatim
+            // for the PDF — running the markdown scrub over it could corrupt it.
+            let content = kind == "onesheet"
+                ? rawContent
+                : rawContent
+                    .replacingOccurrences(of: #"\*\*(.+?)\*\*"#, with: "$1", options: .regularExpression)
+                    .replacingOccurrences(of: #"\*(.+?)\*"#, with: "$1", options: .regularExpression)
             cards.append(ContentCardData(kind: kind, content: content))
         }
         let cleaned = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
@@ -785,8 +821,11 @@ final class ChatManager: ObservableObject {
 
         let (textWithoutSources, sourceLinks) = extractSourcesBlock(from: normalizedText)
         let (textWithoutCards, contentCards) = extractContentCards(from: textWithoutSources)
+        // After the blocks this client renders have been claimed, anything still
+        // fenced belongs to another client and shouldn't be shown as text.
+        let textCleaned = stripUnknownFences(from: textWithoutCards)
         let relatedSourceLinks = chatRelatedLinks(from: sourceLinks)
-        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: textWithoutCards) : textWithoutCards
+        let expandedText = enableInlineMarkdown ? expandMarkdownLinksToAbsoluteURLs(in: textCleaned) : textCleaned
 
         guard preserveStructure else {
             let inlineLinks = extractMarkdownLinks(from: expandedText).map {

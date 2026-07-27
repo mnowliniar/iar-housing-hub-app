@@ -616,6 +616,17 @@ private struct StatusPanel: View {
     let messages: [ChatMessage]
 
     private var progressFraction: CGFloat {
+        if messages.contains(where: { $0.payloadType == .success }) {
+            return 1.0
+        }
+        // The server sends real progress with each status. Take the highest seen
+        // rather than the latest: a turn can report several tool calls, and the
+        // bar should never walk backwards.
+        let reported = messages.compactMap(\.progressPct).max()
+        if let reported {
+            return CGFloat(min(max(reported, 0), 100) / 100)
+        }
+        // Fallback for older servers, which only expressed progress in wording.
         let latestText = messages.last?.text ?? ""
         if latestText.localizedCaseInsensitiveContains("Building") {
             return 0.25
@@ -623,8 +634,6 @@ private struct StatusPanel: View {
             return 0.50
         } else if latestText.localizedCaseInsensitiveContains("Analyzing the results") {
             return 0.75
-        } else if messages.contains(where: { $0.payloadType == .success }) {
-            return 1.0
         }
         return 0.12
     }
@@ -738,7 +747,11 @@ private struct RichChatText: View {
                     }
                 case .contentCard:
                     if let card = block.contentCardData {
-                        ContentCardView(card: card)
+                        if card.kind == "onesheet" {
+                            OnesheetCardView(card: card)
+                        } else {
+                            ContentCardView(card: card)
+                        }
                     }
                 }
             }
@@ -761,7 +774,17 @@ private struct ContentCardView: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 Button {
-                    UIPasteboard.general.string = card.content
+                    // Emails get an HTML flavor alongside plain, so mail
+                    // clients paste real hyperlinks. Everything else pastes
+                    // flattened text with visible URLs.
+                    if let html = card.copyHTML, let data = html.data(using: .utf8) {
+                        UIPasteboard.general.items = [[
+                            "public.html": data,
+                            "public.utf8-plain-text": card.copyPlainText,
+                        ]]
+                    } else {
+                        UIPasteboard.general.string = card.copyPlainText
+                    }
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {
@@ -792,6 +815,148 @@ private struct ContentCardView: View {
                 .stroke(Color(.systemGray4), lineWidth: 1)
         )
     }
+}
+
+/// A one-sheet block: branded PDF handout built server-side. The card shows a
+/// text preview of what's on the page; the action is Download, not Copy —
+/// the deliverable is the file, and the JSON behind it is nothing a person
+/// should ever see.
+private struct OnesheetCardView: View {
+    let card: ContentCardData
+
+    private enum DownloadState: Equatable {
+        case idle, building, failed
+    }
+    /// Wrapper so .sheet(item:) gets Identifiable without a retroactive
+    /// conformance on URL, which would collide with any other declaration.
+    private struct SharePDF: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
+
+    @State private var state: DownloadState = .idle
+    @State private var sharePDF: SharePDF?
+
+    private var spec: OnesheetSpec? { OnesheetSpec.parse(card.content) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: card.systemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(BrandColors.teal)
+                Text(card.heading)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Button {
+                    Task { await download() }
+                } label: {
+                    switch state {
+                    case .building:
+                        ProgressView().controlSize(.small)
+                    case .failed:
+                        Label("Try again", systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red)
+                    case .idle:
+                        Label("Download", systemImage: "arrow.down.doc")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(BrandColors.teal)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(state == .building)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(.systemGray6))
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let spec {
+                    if let title = spec.title, !title.isEmpty {
+                        Text(title).font(.headline)
+                    }
+                    if let subtitle = spec.subtitle, !subtitle.isEmpty {
+                        Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    ForEach(Array((spec.sections ?? []).prefix(4).enumerated()), id: \.offset) { _, section in
+                        VStack(alignment: .leading, spacing: 3) {
+                            if let heading = section.heading, !heading.isEmpty {
+                                Text(heading.uppercased())
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(BrandColors.teal)
+                            }
+                            ForEach(Array((section.bullets ?? []).prefix(5).enumerated()), id: \.offset) { _, bullet in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Circle().fill(BrandColors.teal)
+                                        .frame(width: 4, height: 4)
+                                        .padding(.top, 6)
+                                    Text(bullet).font(.footnote)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Spec didn't parse. Better an honest line than raw JSON.
+                    Text("A one-page PDF is ready to download.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(.systemGray4), lineWidth: 1)
+        )
+        .sheet(item: $sharePDF) { item in
+            OnesheetShareSheet(activityItems: [item.url])
+        }
+    }
+
+    private func download() async {
+        state = .building
+        do {
+            var request = URLRequest(url: URL(string: "\(ChatManager.serverBaseURL)/onesheet/pdf/")!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = card.content.data(using: .utf8)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  data.starts(with: Array("%PDF".utf8)) else {
+                state = .failed
+                return
+            }
+            let name = (spec?.title ?? "one-sheet")
+                .replacingOccurrences(of: #"[^A-Za-z0-9-_ ]"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: " ", with: "_")
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(name.isEmpty ? "one-sheet" : name)
+                .appendingPathExtension("pdf")
+            try data.write(to: url, options: .atomic)
+            state = .idle
+            sharePDF = SharePDF(url: url)
+        } catch {
+            state = .failed
+        }
+    }
+}
+
+private struct OnesheetShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private enum RelatedLinkKind {

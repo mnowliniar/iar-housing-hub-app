@@ -73,6 +73,10 @@ struct MarketView: View {
         .navigationTitle("Market")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            EventTracker.fire(.viewMarkets, metadata: [
+                "geo_id": String(geoID),
+                "surface": "ios_app",
+            ])
             await loadCurrentGeo()
             await loadInsights()
             await loadInsightVizData()

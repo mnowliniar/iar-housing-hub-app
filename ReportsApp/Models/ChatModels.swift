@@ -32,14 +32,15 @@ enum ChatDisplayBlockKind: Equatable {
 }
 
 struct ContentCardData: Equatable {
-    let kind: String  // "post", "email", "script"
-    let content: String
+    let kind: String  // "post", "email", "script", "onesheet"
+    let content: String  // copyable text, except onesheet where it's the spec JSON
 
     var heading: String {
         switch kind {
         case "post": return "Here's your post"
         case "email": return "Here's your email"
         case "script": return "Here's your script"
+        case "onesheet": return "Here's your one-sheet"
         default: return "Here's your content"
         }
     }
@@ -48,8 +49,68 @@ struct ContentCardData: Equatable {
         switch kind {
         case "email": return "envelope"
         case "script": return "text.alignleft"
+        case "onesheet": return "doc.richtext"
         default: return "sparkles"
         }
+    }
+
+    /// Copy-ready plain text: markdown links flattened to visible URLs.
+    /// A social composer can't render an anchor, so the URL has to survive as
+    /// characters or it's silently lost on paste. Mirrors the web's _flattenMd.
+    var copyPlainText: String {
+        var text = content
+        if let regex = try? NSRegularExpression(pattern: #"\[([^\]]+)\]\((https?://[^\s)]+)\)"#) {
+            let ns = text as NSString
+            for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+                let label = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+                let url = ns.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces)
+                let flat = label == url ? url : "\(label) (\(url))"
+                text = (text as NSString).replacingCharacters(in: match.range(at: 0), with: flat)
+            }
+        }
+        return text
+    }
+
+    /// Rich flavor for the pasteboard — email only. Gmail/Outlook paste this as
+    /// real hyperlinks. Posts deliberately stay plain: pasting an anchor into a
+    /// social composer keeps the label and drops the href.
+    var copyHTML: String? {
+        guard kind == "email" else { return nil }
+        var html = content
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        if let regex = try? NSRegularExpression(pattern: #"\[([^\]]+)\]\((https?://[^\s)]+)\)"#) {
+            let ns = html as NSString
+            for match in regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).reversed() {
+                let label = ns.substring(with: match.range(at: 1))
+                let url = ns.substring(with: match.range(at: 2))
+                html = (html as NSString).replacingCharacters(
+                    in: match.range(at: 0),
+                    with: "<a href=\"\(url)\">\(label)</a>"
+                )
+            }
+        }
+        html = html.replacingOccurrences(of: "\n", with: "<br>")
+        return "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;\">\(html)</div>"
+    }
+}
+
+/// The parsed body of a ```onesheet block. The server's /onesheet/pdf/ endpoint
+/// takes this same JSON back verbatim, so the card keeps the raw string for the
+/// POST and this struct only drives the on-screen preview.
+struct OnesheetSpec: Decodable, Equatable {
+    struct Section: Decodable, Equatable {
+        let heading: String?
+        let bullets: [String]?
+    }
+    let title: String?
+    let subtitle: String?
+    let sections: [Section]?
+
+    static func parse(_ json: String) -> OnesheetSpec? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(OnesheetSpec.self, from: data)
     }
 }
 
@@ -92,6 +153,12 @@ struct ChatDisplayBlock: Identifiable, Equatable {
 struct BackendChatMessage: Decodable {
     let type: String
     let body: FlexibleBody
+    /// Progress for a status message, 0-100, sent by the server.
+    /// Optional so older payloads (and any endpoint that doesn't send it) decode fine.
+    let pct: Double?
+    /// Monotonic sequence for status messages. The server appends stages rather
+    /// than replacing, so this identifies which ones have already been shown.
+    let seq: Int?
 }
 
 enum FlexibleBody: Decodable {
@@ -211,6 +278,10 @@ struct ChatMessage: Identifiable, Equatable {
     let isEphemeral: Bool
     let chartSpecJSON: String?
     let displayBlocks: [ChatDisplayBlock]?
+    /// Server-sent progress for a status message, 0-100. The status wording is
+    /// dynamic now ("Looking up Median Sale Price for Hamilton County"), so the
+    /// bar can't be inferred from the text any more.
+    let progressPct: Double?
 
     init(
         sender: ChatSender,
@@ -218,7 +289,8 @@ struct ChatMessage: Identifiable, Equatable {
         payloadType: ChatPayloadType? = nil,
         isEphemeral: Bool = false,
         chartSpecJSON: String? = nil,
-        displayBlocks: [ChatDisplayBlock]? = nil
+        displayBlocks: [ChatDisplayBlock]? = nil,
+        progressPct: Double? = nil
     ) {
         self.sender = sender
         self.text = text
@@ -226,6 +298,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.isEphemeral = isEphemeral
         self.chartSpecJSON = chartSpecJSON
         self.displayBlocks = displayBlocks
+        self.progressPct = progressPct
     }
 }
 

@@ -54,6 +54,7 @@ struct ReportsApp: App {
                 }
                 .onAppear {
                     appDelegate.appState = appState
+                    EventTracker.fire(.appOpen, oncePerSession: true)
                 }
         }
     }
