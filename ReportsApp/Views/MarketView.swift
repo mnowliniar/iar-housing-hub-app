@@ -378,18 +378,32 @@ struct MarketView: View {
                     )
                     .frame(height: 220)
                 } else {
-                    chartPlaceholder(insight)
+                    fallbackChart(insight)
                         .frame(height: 220)
                 }
 
             } else {
-                chartPlaceholder(insight)
+                fallbackChart(insight)
                     .frame(height: 220)
             }
 
             Text("Source: Indiana Association of REALTORS®")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func fallbackChart(_ insight: InsightPreviewItem) -> some View {
+        // unknown insight kinds render the server's chart in a webview, so
+        // new kinds work without an app update
+        if !supportsInsightViz(insight.type),
+           let instanceID = insight.sourceID,
+           let type = insight.type, !type.isEmpty {
+            InsightWebChartView(instanceID: instanceID, insightType: type)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            chartPlaceholder(insight)
         }
     }
 
@@ -688,18 +702,32 @@ struct InsightsView: View {
                     )
                     .frame(height: 220)
                 } else {
-                    chartPlaceholder(insight)
+                    fallbackChart(insight)
                         .frame(height: 220)
                 }
 
             } else {
-                chartPlaceholder(insight)
+                fallbackChart(insight)
                     .frame(height: 220)
             }
 
             Text("Source: Indiana Association of REALTORS®")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func fallbackChart(_ insight: InsightPreviewItem) -> some View {
+        // unknown insight kinds render the server's chart in a webview, so
+        // new kinds work without an app update
+        if !supportsInsightViz(insight.type),
+           let instanceID = insight.sourceID,
+           let type = insight.type, !type.isEmpty {
+            InsightWebChartView(instanceID: instanceID, insightType: type)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            chartPlaceholder(insight)
         }
     }
 
