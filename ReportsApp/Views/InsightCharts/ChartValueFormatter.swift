@@ -15,6 +15,12 @@ struct ChartValueFormatter {
     }
 
     static func isCurrencyLike(format: String?, unit: String?) -> Bool {
+        // percent signals win over the "price" keyword, so a unit like
+        // "of asking price" with format "%" is not currency
+        if isPercentLike(format: format, unit: unit) {
+            return false
+        }
+
         let fmt = (format ?? "").lowercased()
         let unitLower = (unit ?? "").lowercased()
 
