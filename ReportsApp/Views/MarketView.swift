@@ -257,6 +257,7 @@ struct MarketView: View {
             "weekly_recent3_yoy",
             "weekly_trend_yoy",
             "weekly_elbow",
+            "weekly_streak",
             "price_breakout_yoy",
             "monthly_yoy"
         ].contains(type)
@@ -334,7 +335,14 @@ struct MarketView: View {
 
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
-                if insight.type == "weekly_elbow" {
+                if insight.type == "weekly_streak" {
+                    WeeklyStreakInsightChartView(
+                        points: WeeklyStreakInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_elbow" {
                     WeeklyElbowInsightChartView(
                         points: WeeklyElbowInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
@@ -581,6 +589,7 @@ struct InsightsView: View {
             "weekly_recent3_yoy",
             "weekly_trend_yoy",
             "weekly_elbow",
+            "weekly_streak",
             "price_breakout_yoy",
             "monthly_yoy"
         ].contains(type)
@@ -655,7 +664,14 @@ struct InsightsView: View {
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
 
-                if insight.type == "weekly_elbow" {
+                if insight.type == "weekly_streak" {
+                    WeeklyStreakInsightChartView(
+                        points: WeeklyStreakInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_elbow" {
                     WeeklyElbowInsightChartView(
                         points: WeeklyElbowInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
