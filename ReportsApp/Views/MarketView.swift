@@ -258,6 +258,12 @@ struct MarketView: View {
             "weekly_trend_yoy",
             "weekly_elbow",
             "weekly_streak",
+            "weekly_record",
+            "monthly_record",
+            "weekly_crossing",
+            "monthly_crossing",
+            "weekly_yoy_momentum",
+            "weekly_geo_vs_state",
             "price_breakout_yoy",
             "monthly_yoy"
         ].contains(type)
@@ -335,7 +341,38 @@ struct MarketView: View {
 
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
-                if insight.type == "weekly_streak" {
+                if insight.type == "weekly_record" || insight.type == "monthly_record" {
+                    RecordInsightChartView(
+                        points: RecordInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_crossing" || insight.type == "monthly_crossing" {
+                    CrossingInsightChartView(
+                        points: CrossingInsightChartParser.parse(vizData.chartData),
+                        isMonthly: insight.type == "monthly_crossing",
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_yoy_momentum" {
+                    YoYMomentumInsightChartView(
+                        points: YoYMomentumInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_geo_vs_state",
+                          let geoPct = vizData.geoPct,
+                          let statePct = vizData.statePct {
+                    GeoVsStateInsightChartView(
+                        geoPct: geoPct,
+                        statePct: statePct,
+                        geoLabel: insight.geo ?? "This market"
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_streak" {
                     WeeklyStreakInsightChartView(
                         points: WeeklyStreakInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
@@ -471,7 +508,7 @@ struct MarketView: View {
             guard supportsInsightViz(insight.type),
                   let instanceID = insight.sourceID else { continue }
 
-            if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket) {
+            if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket, insightType: insight.type) {
                 loaded[instanceID] = vizData
             }
         }
@@ -590,6 +627,12 @@ struct InsightsView: View {
             "weekly_trend_yoy",
             "weekly_elbow",
             "weekly_streak",
+            "weekly_record",
+            "monthly_record",
+            "weekly_crossing",
+            "monthly_crossing",
+            "weekly_yoy_momentum",
+            "weekly_geo_vs_state",
             "price_breakout_yoy",
             "monthly_yoy"
         ].contains(type)
@@ -664,7 +707,38 @@ struct InsightsView: View {
             if let instanceID = insight.sourceID,
                let vizData = insightVizDataByID[instanceID] {
 
-                if insight.type == "weekly_streak" {
+                if insight.type == "weekly_record" || insight.type == "monthly_record" {
+                    RecordInsightChartView(
+                        points: RecordInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_crossing" || insight.type == "monthly_crossing" {
+                    CrossingInsightChartView(
+                        points: CrossingInsightChartParser.parse(vizData.chartData),
+                        isMonthly: insight.type == "monthly_crossing",
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_yoy_momentum" {
+                    YoYMomentumInsightChartView(
+                        points: YoYMomentumInsightChartParser.parse(vizData.chartData),
+                        format: vizData.format,
+                        unit: vizData.unit
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_geo_vs_state",
+                          let geoPct = vizData.geoPct,
+                          let statePct = vizData.statePct {
+                    GeoVsStateInsightChartView(
+                        geoPct: geoPct,
+                        statePct: statePct,
+                        geoLabel: insight.geo ?? "This market"
+                    )
+                    .frame(height: 220)
+                } else if insight.type == "weekly_streak" {
                     WeeklyStreakInsightChartView(
                         points: WeeklyStreakInsightChartParser.parse(vizData.chartData),
                         format: vizData.format,
@@ -816,7 +890,7 @@ struct InsightsView: View {
             guard supportsInsightViz(insight.type),
                   let instanceID = insight.sourceID else { continue }
 
-            if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket) {
+            if let vizData = await APIService.fetchInsightVizData(instanceID: instanceID, bucket: insight.bucket, insightType: insight.type) {
                 loaded[instanceID] = vizData
             }
         }

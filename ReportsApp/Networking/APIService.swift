@@ -79,6 +79,8 @@ struct InsightVizData {
     let bucket: String?
     let unit: String?
     let format: String?
+    let geoPct: Double?
+    let statePct: Double?
 }
 
 struct APIService {
@@ -165,12 +167,19 @@ struct APIService {
         }
     }
     
-    static func fetchInsightVizData(instanceID: Int, bucket: String? = nil) async -> InsightVizData? {
+    static func fetchInsightVizData(instanceID: Int, bucket: String? = nil, insightType: String? = nil) async -> InsightVizData? {
         var components = URLComponents(string: "https://data.indianarealtors.com/app/insight_viz/\(instanceID)/")!
+        var queryParts: [String] = []
         if let bucket, !bucket.isEmpty {
             let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "+&="))
             let encodedBucket = bucket.addingPercentEncoding(withAllowedCharacters: allowed) ?? bucket
-            components.percentEncodedQuery = "bucket=\(encodedBucket)"
+            queryParts.append("bucket=\(encodedBucket)")
+        }
+        if let insightType, !insightType.isEmpty {
+            queryParts.append("insight_type=\(insightType)")
+        }
+        if !queryParts.isEmpty {
+            components.percentEncodedQuery = queryParts.joined(separator: "&")
         }
 
         guard let url = components.url else { return nil }
@@ -201,7 +210,9 @@ struct APIService {
                 chartData: chartData,
                 bucket: bucket,
                 unit: unit,
-                format: format
+                format: format,
+                geoPct: json["geo_pct"] as? Double,
+                statePct: json["state_pct"] as? Double
             )
         } catch {
             print("❌ Error fetching insight viz data: \(error)")
