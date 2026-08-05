@@ -423,7 +423,7 @@ struct MarketView: View {
                     )
                     .frame(height: 220)
                 } else {
-                    fallbackChart(insight)
+                    webChartOrPlaceholder(insight)
                         .frame(height: 220)
                 }
 
@@ -435,6 +435,20 @@ struct MarketView: View {
             Text("Source: Indiana Association of REALTORS®")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func webChartOrPlaceholder(_ insight: InsightPreviewItem) -> some View {
+        // chart data arrived but the native chart can't render (e.g. the
+        // server didn't send a field it needs): the server-rendered chart
+        // is always a better fallback than the static placeholder
+        if let instanceID = insight.sourceID,
+           let type = insight.type, !type.isEmpty {
+            InsightWebChartView(instanceID: instanceID, insightType: type)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            chartPlaceholder(insight)
         }
     }
 
@@ -792,7 +806,7 @@ struct InsightsView: View {
                     )
                     .frame(height: 220)
                 } else {
-                    fallbackChart(insight)
+                    webChartOrPlaceholder(insight)
                         .frame(height: 220)
                 }
 
@@ -804,6 +818,20 @@ struct InsightsView: View {
             Text("Source: Indiana Association of REALTORS®")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func webChartOrPlaceholder(_ insight: InsightPreviewItem) -> some View {
+        // chart data arrived but the native chart can't render (e.g. the
+        // server didn't send a field it needs): the server-rendered chart
+        // is always a better fallback than the static placeholder
+        if let instanceID = insight.sourceID,
+           let type = insight.type, !type.isEmpty {
+            InsightWebChartView(instanceID: instanceID, insightType: type)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            chartPlaceholder(insight)
         }
     }
 
