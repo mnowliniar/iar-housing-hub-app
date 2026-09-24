@@ -203,7 +203,7 @@ struct ReportSummaryView: View {
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await URLSession.shared.data(for: request.withAppIdentity())
 
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let urlString = json["url"] as? String {

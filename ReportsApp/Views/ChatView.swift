@@ -932,7 +932,7 @@ private struct OnesheetCardView: View {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = card.content.data(using: .utf8)
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
             guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                   data.starts(with: Array("%PDF".utf8)) else {
                 state = .failed

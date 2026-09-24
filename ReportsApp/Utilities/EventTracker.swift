@@ -57,7 +57,7 @@ enum EventTracker {
         let payload: [String: Any] = ["event_key": event.rawValue, "metadata": meta]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        URLSession.shared.dataTask(with: request).resume()
+        URLSession.shared.dataTask(with: request.withAppIdentity()).resume()
     }
 
     /// A Spark action on the open conversation. Adds the thread ID the web

@@ -52,7 +52,7 @@ struct UserPrefsService {
         let url = components.url!
         debugLog("[Prefs] fetch URL:", url.absoluteString)
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .app(url))
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Prefs] fetch status:", http.statusCode)
@@ -82,7 +82,7 @@ struct UserPrefsService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(UserPrefsSaveRequest(prefs: prefs))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Prefs] save status:", http.statusCode)

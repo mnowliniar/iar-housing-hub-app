@@ -86,7 +86,7 @@ final class ChatManager: ObservableObject {
             debugLog("[Chat] listChats computed cookie header:", cookieHeader)
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] listChats status:", http.statusCode)
@@ -156,7 +156,7 @@ final class ChatManager: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] deleteChat status:", http.statusCode)
@@ -187,7 +187,7 @@ final class ChatManager: ObservableObject {
 
         debugLog("[Chat] loadChat URL:", url.absoluteString)
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .app(url))
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] loadChat status:", http.statusCode)
@@ -463,7 +463,7 @@ final class ChatManager: ObservableObject {
     }
     private func generateUniqueID() async throws -> String {
         let url = URL(string: "\(baseURL)/generate_unique_id")!
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await URLSession.shared.data(for: .app(url))
         let decoded = try JSONDecoder().decode(GenerateUniqueIDResponse.self, from: data)
         return decoded.uniqueID
     }
@@ -488,7 +488,7 @@ final class ChatManager: ObservableObject {
         let url = components.url!
         debugLog("[Chat] handleUserQuery URL:", url.absoluteString)
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .app(url))
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] handleUserQuery status:", http.statusCode)
@@ -520,7 +520,7 @@ final class ChatManager: ObservableObject {
         let url = components.url!
         debugLog("[Chat] executeSQL URL:", url.absoluteString)
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(for: .app(url))
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] executeSQL status:", http.statusCode)
@@ -535,7 +535,7 @@ final class ChatManager: ObservableObject {
     private func checkStatus(uniqueID: String) async throws -> CheckStatusResponse {
         var components = URLComponents(string: "\(baseURL)/check_status")!
         components.queryItems = [URLQueryItem(name: "unique_id", value: uniqueID)]
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
+        let (data, _) = try await URLSession.shared.data(for: .app(components.url!))
         return try JSONDecoder().decode(CheckStatusResponse.self, from: data)
     }
 

@@ -108,7 +108,7 @@ final class DashboardService {
             req.addValue(tag, forHTTPHeaderField: "If-None-Match")
         }
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await URLSession.shared.data(for: req.withAppIdentity())
 #if DEBUG
         debugLog("DashboardService status:", (resp as? HTTPURLResponse)?.statusCode ?? -1)
         if let s = String(data: data, encoding: .utf8) { debugLog("DashboardService payload prefix:", s.prefix(200)) }
@@ -688,7 +688,7 @@ struct VizPickerView: View {
     private func loadVizzes() async {
         guard let url = URL(string: "https://data.indianarealtors.com/app/vizzes/") else { return }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             let decoded = try JSONDecoder().decode([VizItem].self, from: data)
             await MainActor.run {
                 self.all = decoded

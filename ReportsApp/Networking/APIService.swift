@@ -88,7 +88,7 @@ struct APIService {
 
     static func fetchReportsGrouped() async -> [String: [Report]] {
         do {
-            let (data, _) = try await URLSession.shared.data(from: baseURL)
+            let (data, _) = try await URLSession.shared.data(for: .app(baseURL))
             let reports = try JSONDecoder().decode([Report].self, from: data)
             return Dictionary(grouping: reports, by: { $0.category })
         } catch {
@@ -100,7 +100,7 @@ struct APIService {
     static func fetchGeoTypes() async -> [String] {
         guard let url = URL(string: "https://data.indianarealtors.com/app/geotypes/") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode([String].self, from: data)
         } catch {
             debugLog("❌ Error fetching geo types: \(error)")
@@ -113,7 +113,7 @@ struct APIService {
               let url = URL(string: "https://data.indianarealtors.com/app/geos/?type=\(encodedType)") else { return [] }
         do {
             debugLog("Fetch geos from url: \(url)")
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode([Geo].self, from: data)
         } catch {
             debugLog("❌ Error fetching geos: \(error)")
@@ -126,7 +126,7 @@ struct APIService {
 
         do {
             debugLog("Fetch geo from url: \(url)")
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
 
             if let raw = String(data: data, encoding: .utf8) {
                 debugLog("[Geo] raw response:", raw)
@@ -151,7 +151,7 @@ struct APIService {
         debugLog("[InsightPreview] requesting:", url)
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             if let raw = String(data: data, encoding: .utf8) {
                 debugLog("[InsightPreview] raw response:", raw)
             }
@@ -186,7 +186,7 @@ struct APIService {
         debugLog("[InsightViz] requesting:", url)
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             if let raw = String(data: data, encoding: .utf8) {
                 debugLog("[InsightViz] raw response:", raw)
             }
@@ -223,7 +223,7 @@ struct APIService {
     static func fetchReportDates(reportID: Int) async -> [ReportDate] {
         guard let url = URL(string: "https://data.indianarealtors.com/app/reports/\(reportID)/dates/") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode([ReportDate].self, from: data)
         } catch {
             debugLog("❌ Error fetching report dates: \(error)")
@@ -240,7 +240,7 @@ struct APIService {
         guard let url = URL(string: urlString) else { return nil }
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode(ReportSummary.self, from: data)
         } catch {
             debugLog("❌ Error fetching report summary: \(error)")
@@ -251,7 +251,7 @@ struct APIService {
     static func fetchLatestReportDate(reportID: Int, geoID: String) async throws -> String {
         var comps = URLComponents(string: "https://data.indianarealtors.com/app/reports/\(reportID)/latest-date")!
         comps.queryItems = [URLQueryItem(name: "geo", value: geoID)]
-        let (data, _) = try await URLSession.shared.data(from: comps.url!)
+        let (data, _) = try await URLSession.shared.data(for: .app(comps.url!))
         let decoded = try JSONDecoder().decode(LatestDateResponse.self, from: data)
         return decoded.date
     }
@@ -265,7 +265,7 @@ struct APIService {
         guard let url = comps.url else { return nil }
         debugLog("[Digest] requesting:", url)
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             if let raw = String(data: data, encoding: .utf8) {
                 debugLog("[Digest] raw response:", raw.prefix(200))
             }
@@ -293,7 +293,7 @@ struct APIService {
             "proptype": proptype
         ])
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await URLSession.shared.data(for: request.withAppIdentity())
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?["subscribed"] as? Bool ?? false
         } catch {

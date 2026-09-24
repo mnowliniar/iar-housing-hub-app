@@ -627,7 +627,7 @@ struct Blog: Decodable, Identifiable {
 final class BlogService {
     static func fetch() async throws -> [Blog] {
         let url = URL(string: "https://data.indianarealtors.com/api/research")!
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await URLSession.shared.data(for: .app(url))
         let root = try JSONDecoder().decode([String:[Blog]].self, from: data) // { "gresults": [...] }
         return root["gresults"] ?? []
     }
@@ -762,7 +762,7 @@ final class ReportsService {
     static func fetch(limit: Int = 12) async throws -> [ReportListItem] {
         var comps = URLComponents(string: "https://data.indianarealtors.com/app/reports/latest/")!
         comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
-        let (data, _) = try await URLSession.shared.data(from: comps.url!)
+        let (data, _) = try await URLSession.shared.data(for: .app(comps.url!))
         return try JSONDecoder().decode([ReportListItem].self, from: data)
     }
 }
@@ -1017,7 +1017,7 @@ final class FavoriteGeoService {
     static func fetchGeoTypes() async -> [String] {
         guard let url = URL(string: "https://data.indianarealtors.com/app/geotypes/") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode([String].self, from: data)
         } catch {
             debugLog("❌ Error fetching geo types: \(error)")
@@ -1029,7 +1029,7 @@ final class FavoriteGeoService {
         guard let encodedType = type.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://data.indianarealtors.com/app/geos/?type=\(encodedType)") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: .app(url))
             return try JSONDecoder().decode([Geo].self, from: data)
         } catch {
             debugLog("❌ Error fetching geos: \(error)")

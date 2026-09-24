@@ -52,6 +52,7 @@ final class AuthManager: ObservableObject {
             }
 
             self.session = decoded
+            AppIdentity.authorization = authHeader()
             if let chatUserID = decoded.chatUserID {
                 UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
             }
@@ -108,6 +109,7 @@ final class AuthManager: ObservableObject {
         var responseData: Data?
 
         do {
+            // No token yet: this call is what mints it.
             let (data, response) = try await URLSession.shared.data(for: request)
             responseData = data
 
@@ -140,6 +142,10 @@ final class AuthManager: ObservableObject {
 
             try persistSession(newSession)
             self.session = newSession
+            AppIdentity.authorization = authHeader()
+            if let chatUserID = newSession.chatUserID {
+                UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
+            }
             self.state = .signedIn
             onSignedIn?()
         } catch {
@@ -171,6 +177,7 @@ final class AuthManager: ObservableObject {
         KeychainHelper.delete(account: sessionAccount)
         UserDefaults.standard.removeObject(forKey: "chat_user_id")
         session = nil
+        AppIdentity.authorization = nil
     }
 }
 
