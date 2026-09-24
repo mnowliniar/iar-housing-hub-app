@@ -92,7 +92,7 @@ struct APIService {
             let reports = try JSONDecoder().decode([Report].self, from: data)
             return Dictionary(grouping: reports, by: { $0.category })
         } catch {
-            print("Failed to fetch reports: \(error)")
+            debugLog("Failed to fetch reports: \(error)")
             return [:]
         }
     }
@@ -103,7 +103,7 @@ struct APIService {
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode([String].self, from: data)
         } catch {
-            print("❌ Error fetching geo types: \(error)")
+            debugLog("❌ Error fetching geo types: \(error)")
             return []
         }
     }
@@ -112,11 +112,11 @@ struct APIService {
         guard let encodedType = type.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://data.indianarealtors.com/app/geos/?type=\(encodedType)") else { return [] }
         do {
-            print("Fetch geos from url: \(url)")
+            debugLog("Fetch geos from url: \(url)")
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode([Geo].self, from: data)
         } catch {
-            print("❌ Error fetching geos: \(error)")
+            debugLog("❌ Error fetching geos: \(error)")
             return []
         }
     }
@@ -125,17 +125,17 @@ struct APIService {
         guard let url = URL(string: "https://data.indianarealtors.com/app/geo/\(geoid)") else { return nil }
 
         do {
-            print("Fetch geo from url: \(url)")
+            debugLog("Fetch geo from url: \(url)")
             let (data, _) = try await URLSession.shared.data(from: url)
 
             if let raw = String(data: data, encoding: .utf8) {
-                print("[Geo] raw response:", raw)
+                debugLog("[Geo] raw response:", raw)
             }
 
             let decoded = try JSONDecoder().decode([Geo].self, from: data)
             return decoded.first
         } catch {
-            print("❌ Error fetching geo:", error)
+            debugLog("❌ Error fetching geo:", error)
             return nil
         }
     }
@@ -148,21 +148,21 @@ struct APIService {
         ]
 
         guard let url = components.url else { return [] }
-        print("[InsightPreview] requesting:", url)
+        debugLog("[InsightPreview] requesting:", url)
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let raw = String(data: data, encoding: .utf8) {
-                print("[InsightPreview] raw response:", raw)
+                debugLog("[InsightPreview] raw response:", raw)
             }
             let decoded = try JSONDecoder().decode(InsightPreviewResponse.self, from: data)
-            print("[InsightPreview] decoded results count:", decoded.results.count)
+            debugLog("[InsightPreview] decoded results count:", decoded.results.count)
             for r in decoded.results {
-                print("[InsightPreview] item -> source_id:", r.sourceID ?? -1, "type:", r.type ?? "nil", "bucket:", r.bucket ?? "nil")
+                debugLog("[InsightPreview] item -> source_id:", r.sourceID ?? -1, "type:", r.type ?? "nil", "bucket:", r.bucket ?? "nil")
             }
             return decoded.results
         } catch {
-            print("❌ Error fetching insight preview: \(error)")
+            debugLog("❌ Error fetching insight preview: \(error)")
             return []
         }
     }
@@ -183,15 +183,15 @@ struct APIService {
         }
 
         guard let url = components.url else { return nil }
-        print("[InsightViz] requesting:", url)
+        debugLog("[InsightViz] requesting:", url)
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let raw = String(data: data, encoding: .utf8) {
-                print("[InsightViz] raw response:", raw)
+                debugLog("[InsightViz] raw response:", raw)
             }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                print("❌ Error fetching insight viz data: response was not an object")
+                debugLog("❌ Error fetching insight viz data: response was not an object")
                 return nil
             }
 
@@ -200,11 +200,11 @@ struct APIService {
             let unit = json["unit"] as? String
             let format = json["format"] as? String
 
-            print("[InsightViz] parsed -> instance:", instanceID)
-            print("[InsightViz] bucket:", bucket ?? "nil")
-            print("[InsightViz] unit:", unit ?? "nil")
-            print("[InsightViz] format:", format ?? "nil")
-            print("[InsightViz] chart rows:", chartData.count)
+            debugLog("[InsightViz] parsed -> instance:", instanceID)
+            debugLog("[InsightViz] bucket:", bucket ?? "nil")
+            debugLog("[InsightViz] unit:", unit ?? "nil")
+            debugLog("[InsightViz] format:", format ?? "nil")
+            debugLog("[InsightViz] chart rows:", chartData.count)
 
             return InsightVizData(
                 chartData: chartData,
@@ -215,7 +215,7 @@ struct APIService {
                 statePct: json["state_pct"] as? Double
             )
         } catch {
-            print("❌ Error fetching insight viz data: \(error)")
+            debugLog("❌ Error fetching insight viz data: \(error)")
             return nil
         }
     }
@@ -226,7 +226,7 @@ struct APIService {
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode([ReportDate].self, from: data)
         } catch {
-            print("❌ Error fetching report dates: \(error)")
+            debugLog("❌ Error fetching report dates: \(error)")
             return []
         }
     }
@@ -243,7 +243,7 @@ struct APIService {
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode(ReportSummary.self, from: data)
         } catch {
-            print("❌ Error fetching report summary: \(error)")
+            debugLog("❌ Error fetching report summary: \(error)")
             return nil
         }
     }
@@ -263,15 +263,15 @@ struct APIService {
         var comps = URLComponents(string: "https://data.indianarealtors.com/app/digest/")!
         comps.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
         guard let url = comps.url else { return nil }
-        print("[Digest] requesting:", url)
+        debugLog("[Digest] requesting:", url)
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let raw = String(data: data, encoding: .utf8) {
-                print("[Digest] raw response:", raw.prefix(200))
+                debugLog("[Digest] raw response:", raw.prefix(200))
             }
             return try JSONDecoder().decode(DigestResponse.self, from: data)
         } catch {
-            print("❌ Error fetching digest: \(error)")
+            debugLog("❌ Error fetching digest: \(error)")
             return nil
         }
     }
@@ -297,7 +297,7 @@ struct APIService {
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?["subscribed"] as? Bool ?? false
         } catch {
-            print("❌ Error toggling digest subscription: \(error)")
+            debugLog("❌ Error toggling digest subscription: \(error)")
             return false
         }
     }

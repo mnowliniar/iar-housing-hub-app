@@ -53,7 +53,7 @@ struct ReportSummaryView: View {
 
                                 Button {
                                     guard let url = makeWebReportURL() else { return }
-                                    print("Export URL:", url.absoluteString)
+                                    debugLog("Export URL:", url.absoluteString)
                                     exportItem = ExportURLItem(url: url)
                                 } label: {
                                     Label("Print", systemImage: "printer")
@@ -87,7 +87,7 @@ struct ReportSummaryView: View {
                                            title: viz.title,
                                            format: viz.format ?? "default"
                                        )
-                                       .onAppear { print("✅ Rendering chart for: \(viz.title) type: \(type)") }
+                                       .onAppear { debugLog("✅ Rendering chart for: \(viz.title) type: \(type)") }
                                        .padding(.top)
                                    }
                                    // BELOW CHART (supporting chips)
@@ -127,7 +127,7 @@ struct ReportSummaryView: View {
             )
         )
         .task {
-            print("Loading summary for \(geo.geoid), \(updateDate)")
+            debugLog("Loading summary for \(geo.geoid), \(updateDate)")
             await loadSummary()
         }
         .sheet(item: $exportItem) { item in
@@ -140,7 +140,7 @@ struct ReportSummaryView: View {
 
     func loadSummary() async {
         isLoading = true
-        print("Calling APIService.fetchReportSummary")
+        debugLog("Calling APIService.fetchReportSummary")
         summary = await APIService.fetchReportSummary(
             reportID: report.id,
             updateDate: updateDate,
@@ -196,7 +196,7 @@ struct ReportSummaryView: View {
                 return URL(string: urlString)
             }
         } catch {
-            print("Share link error:", error)
+            debugLog("Share link error:", error)
         }
 
         return nil
@@ -773,7 +773,7 @@ final class WebReportPrintViewController: UIViewController, WKNavigationDelegate
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        print("Loading export URL:", url.absoluteString)
+        debugLog("Loading export URL:", url.absoluteString)
         webView.navigationDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)

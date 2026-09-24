@@ -1016,7 +1016,7 @@ final class FavoriteGeoService {
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode([String].self, from: data)
         } catch {
-            print("❌ Error fetching geo types: \(error)")
+            debugLog("❌ Error fetching geo types: \(error)")
             return []
         }
     }
@@ -1028,7 +1028,7 @@ final class FavoriteGeoService {
             let (data, _) = try await URLSession.shared.data(from: url)
             return try JSONDecoder().decode([Geo].self, from: data)
         } catch {
-            print("❌ Error fetching geos: \(error)")
+            debugLog("❌ Error fetching geos: \(error)")
             return []
         }
     }

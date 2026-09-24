@@ -154,7 +154,7 @@ struct MarketDashboardSection: View {
             tiles = Array(fetched.prefix(3))
         } catch {
 #if DEBUG
-            print("MarketDashboardSection load error:", error)
+            debugLog("MarketDashboardSection load error:", error)
 #endif
             tiles = []
         }

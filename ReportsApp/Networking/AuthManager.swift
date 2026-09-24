@@ -32,20 +32,20 @@ final class AuthManager: ObservableObject {
     func restoreSession() {
         do {
             guard let data = try KeychainHelper.load(account: sessionAccount) else {
-                print("[Auth] restoreSession: no keychain data")
+                debugLog("[Auth] restoreSession: no keychain data")
                 state = .signedOut
                 return
             }
 
-            print("[Auth] restoreSession: loaded bytes:", data.count)
+            debugLog("[Auth] restoreSession: loaded bytes:", data.count)
 
             let decoded = try JSONDecoder.authDecoder.decode(AuthSession.self, from: data)
-            print("[Auth] restoreSession decoded expiresAt:", decoded.expiresAt)
-            print("[Auth] restoreSession decoded isExpired:", decoded.isExpired)
-            print("[Auth] restoreSession decoded chatUserID:", decoded.chatUserID ?? "nil")
+            debugLog("[Auth] restoreSession decoded expiresAt:", decoded.expiresAt)
+            debugLog("[Auth] restoreSession decoded isExpired:", decoded.isExpired)
+            debugLog("[Auth] restoreSession decoded chatUserID:", decoded.chatUserID ?? "nil")
 
             if decoded.isExpired {
-                print("[Auth] restoreSession: session expired")
+                debugLog("[Auth] restoreSession: session expired")
                 clearSession()
                 state = .signedOut
                 return
@@ -58,7 +58,7 @@ final class AuthManager: ObservableObject {
             self.state = .signedIn
             onSignedIn?()
         } catch {
-            print("[Auth] restoreSession failed:", error)
+            debugLog("[Auth] restoreSession failed:", error)
             clearSession()
             state = .signedOut
         }
@@ -85,9 +85,9 @@ final class AuthManager: ObservableObject {
 
         if let chatUserID {
             UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
-            print("[Auth] chat_user_id received:", chatUserID)
+            debugLog("[Auth] chat_user_id received:", chatUserID)
         } else {
-            print("[Auth] chat_user_id missing in callback")
+            debugLog("[Auth] chat_user_id missing in callback")
         }
 
         Task {
@@ -125,7 +125,7 @@ final class AuthManager: ObservableObject {
             let decoded = try JSONDecoder().decode(AuthExchangeResponse.self, from: data)
 
             guard let expiresAt = parseServerDate(decoded.expiresAt) else {
-                print("[Auth] exchangeCode invalid expiresAt:", decoded.expiresAt)
+                debugLog("[Auth] exchangeCode invalid expiresAt:", decoded.expiresAt)
                 state = .error("Invalid expiration date from server")
                 return
             }
@@ -143,8 +143,8 @@ final class AuthManager: ObservableObject {
             self.state = .signedIn
             onSignedIn?()
         } catch {
-            print("[Auth] exchange decode error:", error)
-            print("[Auth] raw response:", responseData.flatMap { String(data: $0, encoding: .utf8) } ?? "nil")
+            debugLog("[Auth] exchange decode error:", error)
+            debugLog("[Auth] raw response:", responseData.flatMap { String(data: $0, encoding: .utf8) } ?? "nil")
             state = .error("Sign-in failed")
         }
     }
@@ -161,9 +161,9 @@ final class AuthManager: ObservableObject {
 
     private func persistSession(_ session: AuthSession) throws {
         let data = try JSONEncoder.authEncoder.encode(session)
-        print("[Auth] persistSession expiresAt:", session.expiresAt)
-        print("[Auth] persistSession chatUserID:", session.chatUserID ?? "nil")
-        print("[Auth] persistSession bytes:", data.count)
+        debugLog("[Auth] persistSession expiresAt:", session.expiresAt)
+        debugLog("[Auth] persistSession chatUserID:", session.chatUserID ?? "nil")
+        debugLog("[Auth] persistSession bytes:", data.count)
         try KeychainHelper.save(data, account: sessionAccount)
     }
 

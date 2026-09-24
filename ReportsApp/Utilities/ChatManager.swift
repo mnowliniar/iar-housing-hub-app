@@ -62,7 +62,7 @@ final class ChatManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id")
-        print("[Chat] listChats chat_user_id from defaults:", chatUserID ?? "nil")
+        debugLog("[Chat] listChats chat_user_id from defaults:", chatUserID ?? "nil")
 
         let payload = ListChatsRequest(
             filenames: anonymousThreadIDs,
@@ -70,30 +70,30 @@ final class ChatManager: ObservableObject {
         )
         request.httpBody = try JSONEncoder().encode(payload)
 
-        print("[Chat] listChats URL:", url.absoluteString)
-        print("[Chat] listChats request headers:", request.allHTTPHeaderFields ?? [:])
-        print("[Chat] listChats anonymousThreadIDs:", anonymousThreadIDs)
+        debugLog("[Chat] listChats URL:", url.absoluteString)
+        debugLog("[Chat] listChats request headers:", request.allHTTPHeaderFields ?? [:])
+        debugLog("[Chat] listChats anonymousThreadIDs:", anonymousThreadIDs)
 
         let sharedCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
         if sharedCookies.isEmpty {
-            print("[Chat] listChats shared cookies: none")
+            debugLog("[Chat] listChats shared cookies: none")
         } else {
-            print("[Chat] listChats shared cookies:")
+            debugLog("[Chat] listChats shared cookies:")
             for cookie in sharedCookies {
-                print("- \(cookie.name)=\(cookie.value); domain=\(cookie.domain); path=\(cookie.path)")
+                debugLog("- \(cookie.name)=\(cookie.value); domain=\(cookie.domain); path=\(cookie.path)")
             }
             let cookieHeader = HTTPCookie.requestHeaderFields(with: sharedCookies)
-            print("[Chat] listChats computed cookie header:", cookieHeader)
+            debugLog("[Chat] listChats computed cookie header:", cookieHeader)
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         if let http = response as? HTTPURLResponse {
-            print("[Chat] listChats status:", http.statusCode)
-            print("[Chat] listChats response headers:", http.allHeaderFields)
+            debugLog("[Chat] listChats status:", http.statusCode)
+            debugLog("[Chat] listChats response headers:", http.allHeaderFields)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Chat] listChats raw response:", raw)
+            debugLog("[Chat] listChats raw response:", raw)
         }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -124,7 +124,7 @@ final class ChatManager: ObservableObject {
             lastUserMessageID = messages.last(where: { $0.sender == .user })?.id
             resetStatusState()
         } catch {
-            print("[Chat] loadChat failed:", error)
+            debugLog("[Chat] loadChat failed:", error)
         }
     }
     func deleteChat(threadID: String) async {
@@ -136,7 +136,7 @@ final class ChatManager: ObservableObject {
                 newChat()
             }
         } catch {
-            print("[Chat] deleteChat failed:", error)
+            debugLog("[Chat] deleteChat failed:", error)
         }
     }
 
@@ -151,7 +151,7 @@ final class ChatManager: ObservableObject {
         components.queryItems = queryItems
         let url = components.url!
 
-        print("[Chat] deleteChat URL:", url.absoluteString)
+        debugLog("[Chat] deleteChat URL:", url.absoluteString)
 
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
@@ -159,10 +159,10 @@ final class ChatManager: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         if let http = response as? HTTPURLResponse {
-            print("[Chat] deleteChat status:", http.statusCode)
+            debugLog("[Chat] deleteChat status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Chat] deleteChat raw response:", raw)
+            debugLog("[Chat] deleteChat raw response:", raw)
         }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -185,15 +185,15 @@ final class ChatManager: ObservableObject {
         components.queryItems = queryItems
         let url = components.url!
 
-        print("[Chat] loadChat URL:", url.absoluteString)
+        debugLog("[Chat] loadChat URL:", url.absoluteString)
 
         let (data, response) = try await URLSession.shared.data(from: url)
 
         if let http = response as? HTTPURLResponse {
-            print("[Chat] loadChat status:", http.statusCode)
+            debugLog("[Chat] loadChat status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Chat] loadChat raw response:", raw)
+            debugLog("[Chat] loadChat raw response:", raw)
         }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -404,7 +404,7 @@ final class ChatManager: ObservableObject {
             isSending = false
             pendingScrollTarget = lastUserMessageID
         } catch {
-            print("[Chat] send(prompt:) failed:", error)
+            debugLog("[Chat] send(prompt:) failed:", error)
 
             let messageText: String
             if let decodingError = error as? DecodingError {
@@ -486,15 +486,15 @@ final class ChatManager: ObservableObject {
 
         components.queryItems = queryItems
         let url = components.url!
-        print("[Chat] handleUserQuery URL:", url.absoluteString)
+        debugLog("[Chat] handleUserQuery URL:", url.absoluteString)
 
         let (data, response) = try await URLSession.shared.data(from: url)
 
         if let http = response as? HTTPURLResponse {
-            print("[Chat] handleUserQuery status:", http.statusCode)
+            debugLog("[Chat] handleUserQuery status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Chat] handleUserQuery raw response:", raw)
+            debugLog("[Chat] handleUserQuery raw response:", raw)
         }
 
         return try JSONDecoder().decode(HandleUserQueryResponse.self, from: data)
@@ -518,15 +518,15 @@ final class ChatManager: ObservableObject {
 
         components.queryItems = queryItems
         let url = components.url!
-        print("[Chat] executeSQL URL:", url.absoluteString)
+        debugLog("[Chat] executeSQL URL:", url.absoluteString)
 
         let (data, response) = try await URLSession.shared.data(from: url)
 
         if let http = response as? HTTPURLResponse {
-            print("[Chat] executeSQL status:", http.statusCode)
+            debugLog("[Chat] executeSQL status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Chat] executeSQL raw response:", raw)
+            debugLog("[Chat] executeSQL raw response:", raw)
         }
 
         return try JSONDecoder().decode(ExecuteSQLResponse.self, from: data)

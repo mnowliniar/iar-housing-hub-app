@@ -114,6 +114,7 @@
 				Models/ReportDate.swift,
 				Models/ReportSummary.swift,
 				Networking/APIService.swift,
+				Utilities/DebugLog.swift,
 				Views/WatchHomeView.swift,
 				Views/WatchSettingsView.swift,
 			);

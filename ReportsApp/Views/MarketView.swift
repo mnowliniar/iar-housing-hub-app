@@ -961,7 +961,7 @@ private struct InsightShareItem: Identifiable {
             try data.write(to: url, options: .atomic)
             return InsightShareItem(image: image, fileURL: url, title: title)
         } catch {
-            print("❌ Error writing shared image:", error)
+            debugLog("❌ Error writing shared image:", error)
             return nil
         }
     }

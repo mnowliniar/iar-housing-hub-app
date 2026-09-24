@@ -50,15 +50,15 @@ struct UserPrefsService {
         ]
 
         let url = components.url!
-        print("[Prefs] fetch URL:", url.absoluteString)
+        debugLog("[Prefs] fetch URL:", url.absoluteString)
 
         let (data, response) = try await URLSession.shared.data(from: url)
 
         if let http = response as? HTTPURLResponse {
-            print("[Prefs] fetch status:", http.statusCode)
+            debugLog("[Prefs] fetch status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Prefs] fetch raw response:", raw)
+            debugLog("[Prefs] fetch raw response:", raw)
         }
 
         return try JSONDecoder().decode(UserPrefsEnvelope.self, from: data).prefs
@@ -75,7 +75,7 @@ struct UserPrefsService {
         ]
 
         let url = components.url!
-        print("[Prefs] save URL:", url.absoluteString)
+        debugLog("[Prefs] save URL:", url.absoluteString)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -85,10 +85,10 @@ struct UserPrefsService {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         if let http = response as? HTTPURLResponse {
-            print("[Prefs] save status:", http.statusCode)
+            debugLog("[Prefs] save status:", http.statusCode)
         }
         if let raw = String(data: data, encoding: .utf8) {
-            print("[Prefs] save raw response:", raw)
+            debugLog("[Prefs] save raw response:", raw)
         }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -133,7 +133,7 @@ final class AppState: ObservableObject {
                 self.selectedGeoID = selectedGeoID
             }
         } catch {
-            print("[Prefs] load failed:", error)
+            debugLog("[Prefs] load failed:", error)
         }
     }
 
@@ -145,7 +145,7 @@ final class AppState: ObservableObject {
             do {
                 try await prefsService.savePrefs(prefs)
             } catch {
-                print("[Prefs] save failed:", error)
+                debugLog("[Prefs] save failed:", error)
             }
         }
     }

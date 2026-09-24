@@ -22,16 +22,16 @@ enum WidgetAPI {
         guard let url = components.url else { return nil }
 
         do {
-            print("[InsightWidget] requesting:", url)
+            debugLog("[InsightWidget] requesting:", url)
 
             let (data, response) = try await URLSession.shared.data(from: url)
 
             if let http = response as? HTTPURLResponse {
-                print("[InsightWidget] status:", http.statusCode)
+                debugLog("[InsightWidget] status:", http.statusCode)
             }
 
             if let raw = String(data: data, encoding: .utf8) {
-                print("[InsightWidget] raw response:", raw)
+                debugLog("[InsightWidget] raw response:", raw)
             }
 
             let decoded = try JSONDecoder().decode(InsightPreviewResponse.self, from: data)
@@ -43,7 +43,7 @@ enum WidgetAPI {
                 items: decoded.results
             )
         } catch {
-            print("❌ Error fetching insight preview:", error)
+            debugLog("❌ Error fetching insight preview:", error)
             return nil
         }
     }
@@ -52,24 +52,24 @@ enum WidgetAPI {
         guard let url = makeURL(geoID: geoID, vizID: vizID) else { return nil }
 
         do {
-            print("[Widget] requesting:", url)
+            debugLog("[Widget] requesting:", url)
 
             let (data, response) = try await URLSession.shared.data(from: url)
 
             if let http = response as? HTTPURLResponse {
-                print("[Widget] status:", http.statusCode)
+                debugLog("[Widget] status:", http.statusCode)
             }
 
             if let raw = String(data: data, encoding: .utf8) {
-                print("[Widget] raw response:", raw)
+                debugLog("[Widget] raw response:", raw)
             }
 
             let decoded = try JSONDecoder().decode(DashboardResponse.self, from: data)
-            print("[Widget] decoded geo count:", decoded.results.count)
+            debugLog("[Widget] decoded geo count:", decoded.results.count)
 
             return decoded.results.first.flatMap(mapGeo)
         } catch {
-            print("[Widget] fetch error:", error)
+            debugLog("[Widget] fetch error:", error)
             return nil
         }
     }
