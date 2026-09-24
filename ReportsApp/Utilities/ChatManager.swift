@@ -59,9 +59,21 @@ final class ChatManager: ObservableObject {
     private let baseURL = ChatManager.serverBaseURL
     private var pollingTask: Task<Void, Never>?
 
+    /// Lowercase, like the web's. The web's chat pages (report, slides,
+    /// files) only accept lowercase ids, and the pin and chat files are keyed
+    /// by the exact string, so an uppercase app id could never be opened
+    /// there.
+    static func newThreadID() -> String { UUID().uuidString.lowercased() }
+
+    /// The web's report and slides editors can open this chat. Chats the app
+    /// started before ids went lowercase can't be.
+    var canOpenOnWeb: Bool {
+        !messages.isEmpty && threadID == threadID.lowercased()
+    }
+
     var threadID: String {
         if storedThreadID.isEmpty {
-            storedThreadID = UUID().uuidString
+            storedThreadID = Self.newThreadID()
         }
         return storedThreadID
     }
@@ -374,7 +386,7 @@ final class ChatManager: ObservableObject {
     }
     func newChat() {
         pollingTask?.cancel()
-        storedThreadID = UUID().uuidString
+        storedThreadID = Self.newThreadID()
         messages = []
         inputText = ""
         conversationName = nil
@@ -515,6 +527,7 @@ final class ChatManager: ObservableObject {
         }
         removeEphemeralMessages()
         appendBackendMessages(result.messages, sender: .assistant, answerID: answerID)
+        autoPin(result.messages)
         repeatOffer = result.repeatOffer
         lastAnswerHadData = result.hadData
         lastAnswerText = result.responseText
@@ -528,6 +541,104 @@ final class ChatManager: ObservableObject {
         Task { [weak self] in
             await self?.loadFollowUpChip(chartCount: chartCount, threadAtAnswer: threadAtAnswer)
         }
+    }
+
+    // MARK: - Pins
+
+    /// Pins what an answer made, as the web does the moment it shows it:
+    /// each chart (its spec), each post/email/script (its text), a one-sheet
+    /// (its spec JSON) and each source (url and type). The web's report,
+    /// slides and files pages are built from these pins, so without them a
+    /// chat asked in the app opened empty there.
+    private func autoPin(_ backendMessages: [BackendChatMessage]) {
+        let thread = threadID
+        let chatLabel = (conversationName?.isEmpty == false ? conversationName : nil) ?? "Untitled"
+        var pending: [(type: String, label: String, content: Any)] = []
+        for item in backendMessages {
+            switch item.type {
+            case "chart":
+                for json in chartSpecJSONs(from: item.body) {
+                    guard let data = json.data(using: .utf8),
+                          let spec = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+                    pending.append(("chart", (spec["title"] as? String) ?? "Chart", spec))
+                }
+            case "response":
+                let text = item.body.textValue
+                    .replacingOccurrences(of: "\\n", with: "\n")
+                    .replacingOccurrences(of: "\r\n", with: "\n")
+                let (withoutSources, sources) = extractSourcesBlock(from: text)
+                let (_, cards) = extractContentCards(from: withoutSources)
+                for card in cards {
+                    pending.append((card.kind, chatLabel, card.content))
+                }
+                for source in sources {
+                    pending.append(("source", source.title, ["url": source.href, "link_type": source.linkType]))
+                }
+            default:
+                continue
+            }
+        }
+        guard !pending.isEmpty else { return }
+        // One save at a time: /save_pin/ rewrites the whole pin file, so two
+        // in flight can each drop the other's pin.
+        pinQueue = Task { [previous = pinQueue] in
+            await previous?.value
+            for pin in pending {
+                await Self.savePin(threadID: thread, type: pin.type, label: pin.label, content: pin.content)
+            }
+        }
+    }
+    private var pinQueue: Task<Void, Never>?
+
+    private static func savePin(threadID: String, type: String, label: String, content: Any) async {
+        var components = URLComponents(string: "\(serverBaseURL)/save_pin/")!
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        guard let url = components.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["thread_id": threadID, "type": type, "label": String(label.prefix(200)), "content": content]
+        guard JSONSerialization.isValidJSONObject(body) else { return }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        _ = try? await URLSession.shared.data(for: request.withAppIdentity())
+    }
+
+    /// The open chat's pinboard.
+    func loadPins() async -> [SparkPin] {
+        var components = URLComponents(string: "\(baseURL)/load_pins/")!
+        var items = [URLQueryItem(name: "thread_id", value: threadID)]
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            items.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
+        }
+        components.queryItems = items
+        guard let url = components.url,
+              let reply = try? await URLSession.shared.data(for: .app(url)),
+              let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any],
+              let raw = json["pins"] as? [[String: Any]] else { return [] }
+        return raw.compactMap(SparkPin.init(json:))
+    }
+
+    /// A one-time link that opens `path` on the web signed in as this member,
+    /// for the web's report and slides editors.
+    func webLink(path: String) async throws -> URL {
+        guard let url = URL(string: "\(baseURL)/app/web-link/") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["next": path])
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            throw NSError(domain: "ChatManager", code: 401, userInfo: [
+                NSLocalizedDescriptionKey: "Sign out and back in to open the web editors from the app.",
+            ])
+        }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let link = json["url"] as? String, let result = URL(string: link) else {
+            throw URLError(.badServerResponse)
+        }
+        return result
     }
 
     // MARK: - After an answer
@@ -777,6 +888,7 @@ final class ChatManager: ObservableObject {
                 pollingTask?.cancel()
                 removeEphemeralMessages()
                 appendBackendMessages(final.messages, sender: .assistant, answerID: "response" + uniqueID)
+                autoPin(final.messages)
             } else {
                 removeEphemeralMessages()
             }

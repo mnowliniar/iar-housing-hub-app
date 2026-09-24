@@ -252,3 +252,62 @@ enum SparkDates {
         return f.string(from: date)
     }
 }
+
+/// One pin on a chat's pinboard, as /load_pins/ returns it. `content` differs
+/// by type: a chart spec, a post's text, a one-sheet's spec JSON, a source's
+/// url, a fact's text, an insight's headline.
+struct SparkPin: Identifiable {
+    let id: String
+    /// chart, post, email, script, onesheet, source, fact, insight, table
+    let type: String
+    let label: String
+    /// Copyable text for posts, emails, scripts and facts.
+    let text: String?
+    /// A source pin's link.
+    let url: String?
+    /// A chart pin's spec, re-serialized for the chart view.
+    let chartSpecJSON: String?
+
+    init?(json: [String: Any]) {
+        guard let id = json["id"] as? String, let type = json["type"] as? String else { return nil }
+        self.id = id
+        self.type = type
+        let content = json["content"]
+        let dict = content as? [String: Any]
+        var label = (json["label"] as? String) ?? ""
+        var text: String?
+        var url: String?
+        var chart: String?
+        switch type {
+        case "chart":
+            if let dict, JSONSerialization.isValidJSONObject(dict),
+               let data = try? JSONSerialization.data(withJSONObject: dict) {
+                chart = String(data: data, encoding: .utf8)
+            }
+        case "source":
+            url = dict?["url"] as? String
+        case "fact":
+            text = dict?["text"] as? String
+        case "insight":
+            text = (dict?["headline"] as? String) ?? (dict?["title"] as? String)
+        default:
+            text = content as? String
+        }
+        if label.isEmpty { label = type.capitalized }
+        self.label = label
+        self.text = text
+        self.url = url
+        self.chartSpecJSON = chart
+    }
+
+    /// The pinboard's groups, in the web's order.
+    var group: String {
+        switch type {
+        case "chart", "table": return "Charts"
+        case "post", "email", "script", "fact", "insight": return "Posts and emails"
+        case "onesheet": return "One-sheets"
+        case "source": return "Sources"
+        default: return "Other"
+        }
+    }
+}

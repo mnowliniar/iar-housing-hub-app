@@ -17,6 +17,7 @@ struct ChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var activeGutsContent: GutsModalContent?
     @State private var showingChatList = false
+    @State private var showingFiles = false
     @State private var isConsumingSparkPrompt = false
 
     private func associatedGutsText(for index: Int) -> String? {
@@ -66,6 +67,16 @@ struct ChatView: View {
         isConsumingSparkPrompt = false
     }
 
+    /// A chat opened from a universal link.
+    @MainActor
+    private func openLinkedThreadIfNeeded() async {
+        guard let thread = app.sparkThreadToOpen, !thread.isEmpty else { return }
+        app.sparkThreadToOpen = nil
+        showingChatList = false
+        showingFiles = false
+        await chat.loadChat(threadID: thread)
+    }
+
     private var hasPendingSparkPrompt: Bool {
         guard let prompt = app.sparkPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return false
@@ -79,6 +90,17 @@ struct ChatView: View {
                 Text(chat.conversationName ?? "Chat")
                     .font(.headline)
                 Spacer()
+
+                if !chat.messages.isEmpty {
+                    Button {
+                        showingFiles = true
+                    } label: {
+                        Label("Files", systemImage: "tray.full")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                }
 
                 Button {
                     showingChatList = true
@@ -226,6 +248,11 @@ struct ChatView: View {
                     }
             }
         }
+        .sheet(isPresented: $showingFiles) {
+            NavigationStack {
+                SparkFilesSheet(chat: chat)
+            }
+        }
         .sheet(isPresented: $showingChatList) {
             NavigationStack {
                 SparkSidebarSheet(
@@ -250,6 +277,10 @@ struct ChatView: View {
         }
         .task {
             await consumeSparkPromptIfNeeded()
+            await openLinkedThreadIfNeeded()
+        }
+        .onChange(of: app.sparkThreadToOpen) { _, _ in
+            Task { await openLinkedThreadIfNeeded() }
         }
         .onChange(of: app.sparkPrompt) { _, _ in
             Task {
@@ -766,6 +797,304 @@ private struct ChartCardView: View {
         )
         renderer.scale = displayScale
         return renderer.uiImage
+    }
+}
+
+// MARK: - Files, pinboard and PowerPoint
+
+private struct WebLinkItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct DeckFileItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// A chat's deliverables, like the web's Files panel and pinboard: the chat's
+/// charts as a PowerPoint, the web's editors for slides, report and
+/// one-pager (opened signed in), and everything pinned.
+private struct SparkFilesSheet: View {
+    @ObservedObject var chat: ChatManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var pins: [SparkPin] = []
+    @State private var loadingPins = true
+    @State private var buildingDeck = false
+    @State private var deckFile: DeckFileItem?
+    @State private var webLink: WebLinkItem?
+    @State private var openingPath: String?
+    @State private var errorMessage: String?
+
+    private var chartJSONs: [String] {
+        chat.messages.compactMap { $0.payloadType == .chart ? $0.chartSpecJSON : nil }
+    }
+
+    private struct PinGroup: Identifiable {
+        let name: String
+        let pins: [SparkPin]
+        var id: String { name }
+    }
+
+    private var groups: [PinGroup] {
+        let order = ["Charts", "Posts and emails", "One-sheets", "Sources", "Other"]
+        return order.compactMap { name -> PinGroup? in
+            let matching = pins.filter { $0.group == name }
+            return matching.isEmpty ? nil : PinGroup(name: name, pins: matching)
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    Task { await buildDeck() }
+                } label: {
+                    HStack {
+                        Label(chartJSONs.count == 1 ? "PowerPoint of 1 chart" : "PowerPoint of \(chartJSONs.count) charts",
+                              systemImage: "rectangle.on.rectangle")
+                        Spacer()
+                        if buildingDeck { ProgressView() }
+                    }
+                }
+                .disabled(chartJSONs.isEmpty || buildingDeck)
+            } header: {
+                Text("Download")
+            } footer: {
+                if chartJSONs.isEmpty {
+                    Text("Ask for a chart and it can go into a deck.")
+                } else {
+                    Text("One chart per slide, with its title. Arrange the deck on the web with Edit slides.")
+                }
+            }
+
+            Section {
+                ForEach(webEditors, id: \.path) { editor in
+                    Button {
+                        Task { await open(editor.path) }
+                    } label: {
+                        HStack {
+                            Label(editor.title, systemImage: editor.icon)
+                            Spacer()
+                            if openingPath == editor.path {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(!chat.canOpenOnWeb || openingPath != nil)
+                }
+            } header: {
+                Text("Edit on the web")
+            } footer: {
+                Text(chat.canOpenOnWeb
+                     ? "Opens the Hub's editors signed in as you."
+                     : "Chats started in earlier versions of the app can't open in the web editors. New chats can.")
+            }
+
+            if loadingPins {
+                Section("Pinboard") { ProgressView() }
+            } else if pins.isEmpty {
+                Section("Pinboard") {
+                    Text("Charts, posts and sources from this chat are pinned here as they're made.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(groups) { group in
+                    Section(group.name) {
+                        ForEach(group.pins) { pin in
+                            SparkPinRow(pin: pin)
+                        }
+                    }
+                }
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).font(.footnote).foregroundStyle(.red)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Files")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { dismiss() }
+            }
+        }
+        .task {
+            pins = await chat.loadPins()
+            loadingPins = false
+        }
+        .refreshable {
+            pins = await chat.loadPins()
+        }
+        .sheet(item: $deckFile) { item in
+            ChartActivityView(activityItems: [item.url])
+        }
+        .sheet(item: $webLink) { item in
+            SafariView(url: item.url)
+                .ignoresSafeArea()
+        }
+    }
+
+    private struct WebEditor {
+        let title: String
+        let icon: String
+        let path: String
+    }
+
+    private var webEditors: [WebEditor] {
+        let base = "/chat/\(chat.threadID)"
+        return [
+            WebEditor(title: "Edit slides", icon: "rectangle.stack", path: "\(base)/slides/"),
+            WebEditor(title: "Edit report", icon: "doc.text", path: "\(base)/report/"),
+            WebEditor(title: "One-pager", icon: "doc.richtext", path: "\(base)/onepager/"),
+            WebEditor(title: "All files", icon: "folder", path: "\(base)/files/"),
+        ]
+    }
+
+    private func open(_ path: String) async {
+        openingPath = path
+        errorMessage = nil
+        defer { openingPath = nil }
+        do {
+            let url = try await chat.webLink(path: path)
+            webLink = WebLinkItem(url: url)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func buildDeck() async {
+        buildingDeck = true
+        errorMessage = nil
+        defer { buildingDeck = false }
+        do {
+            let url = try await SparkDeckExporter.export(
+                chartJSONs: chartJSONs,
+                title: chat.conversationName ?? "Market Update",
+                threadID: chat.threadID
+            )
+            deckFile = DeckFileItem(url: url)
+            EventTracker.fireSpark(.sparkExport, kind: "deck", target: "\(chartJSONs.count) charts")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct SparkPinRow: View {
+    let pin: SparkPin
+    @State private var copied = false
+
+    private var chartSpec: NormalizedChartSpec? {
+        guard let json = pin.chartSpecJSON, let data = json.data(using: .utf8),
+              let ai = try? JSONDecoder().decode(AIChartSpec.self, from: data) else { return nil }
+        return ChartNormalizer.build(from: ai)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(pin.label)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            if let spec = chartSpec {
+                SparkChartView(spec: spec)
+                    .frame(height: 170)
+            } else if let text = pin.text, !text.isEmpty {
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(6)
+                Button {
+                    UIPasteboard.general.string = text
+                    copied = true
+                    EventTracker.fireSpark(.sparkCopy, kind: pin.type, target: text)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                } label: {
+                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(BrandColors.teal)
+            } else if let link = pin.url, let url = URL(string: link.hasPrefix("http") ? link : ChatManager.serverBaseURL + link) {
+                Link(destination: url) {
+                    Label("Open", systemImage: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(BrandColors.teal)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// The chat's charts as a PowerPoint: each drawn by the app's own chart view
+/// at 16:9, sent to the web's /deck/pptx/, which builds the same deck the
+/// web's download does (one chart per slide, its title, the member's
+/// attribution).
+@MainActor
+private enum SparkDeckExporter {
+    struct DeckError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    static func export(chartJSONs: [String], title: String, threadID: String) async throws -> URL {
+        var slides: [[String: Any]] = []
+        for json in chartJSONs.prefix(30) {
+            guard let data = json.data(using: .utf8),
+                  let ai = try? JSONDecoder().decode(AIChartSpec.self, from: data) else { continue }
+            let spec = ChartNormalizer.build(from: ai)
+            let renderer = ImageRenderer(
+                content: SparkChartView(spec: spec)
+                    .frame(width: 1200, height: 675)
+                    .padding(24)
+                    .background(Color.white)
+                    .environment(\.colorScheme, .light)
+            )
+            renderer.scale = 2
+            guard let png = renderer.uiImage?.pngData() else { continue }
+            slides.append([
+                "title": spec.title ?? "",
+                "subtitle": spec.subtitle ?? "",
+                "image": "data:image/png;base64," + png.base64EncodedString(),
+            ])
+        }
+        guard !slides.isEmpty else { throw DeckError(message: "None of this chat's charts could be drawn.") }
+
+        var components = URLComponents(string: "\(ChatManager.serverBaseURL)/deck/pptx/")!
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["title": title, "slides": slides, "thread_id": threadID]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
+        // A .pptx is a zip; anything else is the server's error text.
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              data.starts(with: Array("PK".utf8)) else {
+            throw DeckError(message: "The Hub couldn't build the deck. Try again in a minute.")
+        }
+        let name = title
+            .replacingOccurrences(of: #"[^A-Za-z0-9-_ ]"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: " ", with: "_")
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(name.isEmpty ? "Market_Update" : String(name.prefix(60)))
+            .appendingPathExtension("pptx")
+        try data.write(to: url, options: .atomic)
+        return url
     }
 }
 

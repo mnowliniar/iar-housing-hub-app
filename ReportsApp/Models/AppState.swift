@@ -111,6 +111,10 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Int = 0
     @Published var sparkPrompt: String? = nil
     @Published var insightGeoID: String? = nil
+    /// A Spark chat to open, from a universal link.
+    @Published var sparkThreadToOpen: String? = nil
+    /// A market page to open, from a universal link.
+    @Published var marketGeoID: String? = nil
     @Published var activeReport: ActiveReport? = nil
     @Published var showDigest: Bool = false
 
@@ -151,6 +155,10 @@ final class AppState: ObservableObject {
     }
 
     func handleDeepLink(_ url: URL) {
+        if let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" {
+            handleHubLink(url)
+            return
+        }
         guard url.scheme?.lowercased() == "iarhousinghub" else { return }
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -179,5 +187,51 @@ final class AppState: ObservableObject {
                 selectedTab = 0
             }
         }
+    }
+
+    /// Universal links: a Hub link tapped in Mail, Messages or Safari. The
+    /// server's apple-app-site-association decides which paths come here: a
+    /// Spark chat, a report, a market. Editors under a chat stay on the web.
+    private func handleHubLink(_ url: URL) {
+        guard url.host?.lowercased() == AppIdentity.hubHost else { return }
+        var parts = url.pathComponents.filter { $0 != "/" }
+        // /reports/... mirrors the root routes.
+        if parts.first == "reports" { parts.removeFirst() }
+        guard let first = parts.first else { return }
+
+        switch first {
+        case "chat":
+            // /chat/<thread>/
+            guard parts.count >= 2 else { return }
+            sparkThreadToOpen = parts[1].lowercased()
+            selectedTab = 2
+        case "market":
+            // /market/<geo>/
+            guard parts.count >= 2, Int(parts[1]) != nil else { return }
+            marketGeoID = parts[1]
+            selectedTab = 0
+        case "viewreport":
+            // /viewreport/<report>/<proptype>/<geo>/[<yyyy>/<m>/<d>/]
+            guard parts.count >= 4, let reportID = Int(parts[1]) else { return }
+            let geoID = parts[3]
+            var date: String?
+            if parts.count >= 7, let y = Int(parts[4]), let m = Int(parts[5]), let d = Int(parts[6]) {
+                date = String(format: "%04d-%02d-%02d", y, m, d)
+            }
+            Task { await openReport(reportID: reportID, geoID: geoID, date: date) }
+        default:
+            return
+        }
+    }
+
+    /// Shows a report from a link. Without a date in the link, the latest.
+    private func openReport(reportID: Int, geoID: String, date: String?) async {
+        guard let geo = await APIService.fetchGeo(geoid: geoID) else { return }
+        var updateDate = date
+        if updateDate == nil {
+            updateDate = try? await APIService.fetchLatestReportDate(reportID: reportID, geoID: geoID)
+        }
+        guard let updateDate, !updateDate.isEmpty else { return }
+        activeReport = ActiveReport(report: Report(id: reportID, title: "Report"), geo: geo, updateDate: updateDate)
     }
 }

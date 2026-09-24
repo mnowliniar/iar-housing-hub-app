@@ -12,6 +12,13 @@ struct HomeView: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var auth: AuthManager
     @State private var showDeepLinkedInsights = false
+
+    /// A market page opened from a universal link.
+    private var showLinkedMarket: Binding<Bool> {
+        Binding(get: { app.marketGeoID != nil },
+                set: { if !$0 { app.marketGeoID = nil } })
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -61,6 +68,12 @@ struct HomeView: View {
         }
         .onChange(of: app.insightGeoID) { _, newValue in
             showDeepLinkedInsights = (newValue != nil)
+        }
+        .navigationDestination(isPresented: showLinkedMarket) {
+            if let geo = app.marketGeoID.flatMap(Int.init) {
+                MarketView(geoID: geo)
+                    .environmentObject(app)
+            }
         }
     }
 }
