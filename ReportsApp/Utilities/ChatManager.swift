@@ -21,7 +21,32 @@ final class ChatManager: ObservableObject {
     @Published var chats: [ChatSummary] = []
     @Published var isLoadingChats = false
     @Published var chatListError: String?
+    /// The answer as it streams in: the opening line, then the prose tokens.
+    /// Both clear when the final result replaces them.
+    @Published var streamingPreamble: String = ""
+    @Published var streamingTokens: String = ""
+    /// The repeat-request offer that came with the last answer, if any.
+    @Published var repeatOffer: RepeatOffer?
+    /// What the last answer was, for the follow-up chip.
+    @Published var lastAnswerHadData = false
+    @Published var lastAnswerText: String?
+    /// One suggested next question under the last answer, like the web's chip.
+    @Published var followUpChip: String?
+    /// Confirmation or error after the member answers the repeat offer.
+    @Published var repeatOfferStatus: String?
+    @Published var isAcceptingRepeatOffer = false
     private var lastUserMessageID: UUID?
+    /// The question behind the last answer. Accepting a repeat offer saves it
+    /// as the recipe.
+    private var lastPrompt: String?
+
+    /// Live preview text while an answer streams, or nil when there is none.
+    var streamingText: String? {
+        let parts = [streamingPreamble, streamingTokens]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+    }
 
     @AppStorage("currentChatThreadID") private var storedThreadID: String = ""
 
@@ -122,6 +147,7 @@ final class ChatManager: ObservableObject {
             inputText = ""
             pendingScrollTarget = messages.last?.id
             lastUserMessageID = messages.last(where: { $0.sender == .user })?.id
+            clearAnswerExtras()
             resetStatusState()
         } catch {
             debugLog("[Chat] loadChat failed:", error)
@@ -339,7 +365,20 @@ final class ChatManager: ObservableObject {
         conversationName = nil
         pendingScrollTarget = nil
         lastUserMessageID = nil
+        clearAnswerExtras()
         resetStatusState()
+    }
+
+    /// Streaming preview, offer and follow-up state belong to one answer.
+    private func clearAnswerExtras() {
+        streamingPreamble = ""
+        streamingTokens = ""
+        repeatOffer = nil
+        lastAnswerHadData = false
+        lastAnswerText = nil
+        followUpChip = nil
+        repeatOfferStatus = nil
+        isAcceptingRepeatOffer = false
     }
 
     func sendCurrentMessage() async {
@@ -359,6 +398,7 @@ final class ChatManager: ObservableObject {
 
     func send(prompt: String) async {
         isSending = true
+        clearAnswerExtras()
         statusMessages = [
             ChatMessage(
                 sender: .system,
@@ -368,7 +408,301 @@ final class ChatManager: ObservableObject {
             )
         ]
         statusText = "Analyzing your question"
+        let sendingThreadID = threadID
+        lastPrompt = prompt
 
+        // The stream is the web's path: the answer arrives as it's written,
+        // and only it carries the repeat offer. Fall back to the older
+        // request-and-poll path only when the stream itself fails, never
+        // because of what an answer contained, so a question never runs twice
+        // over a display problem.
+        do {
+            let uniqueID = try await generateUniqueID()
+            let result = try await streamQuery(prompt: prompt, uniqueID: uniqueID, threadID: sendingThreadID)
+            guard sendingThreadID == threadID else {
+                abandonAnswer()  // the member started a new chat meanwhile
+                return
+            }
+            finishStreamedAnswer(result, answerID: "response" + uniqueID)
+            return
+        } catch let unreadable as StreamResultUnreadable {
+            // The question already ran; re-asking would run it twice.
+            guard sendingThreadID == threadID else { abandonAnswer(); return }
+            showSendError(unreadable.underlying)
+            return
+        } catch let failure as StreamFailure {
+            debugLog("[Chat] stream failed, falling back:", failure.reason)
+        } catch {
+            debugLog("[Chat] stream failed, falling back:", error)
+        }
+        guard sendingThreadID == threadID else { abandonAnswer(); return }
+        streamingPreamble = ""
+        streamingTokens = ""
+        await sendByPolling(prompt: prompt)
+    }
+
+    /// Drops an answer that finished after the member moved to another chat.
+    private func abandonAnswer() {
+        streamingPreamble = ""
+        streamingTokens = ""
+        resetStatusState()
+        isSending = false
+    }
+
+    /// Adds the error bubble the polled path has always shown.
+    private func showSendError(_ error: Error) {
+        let messageText: String
+        if let decodingError = error as? DecodingError {
+            messageText = "Something went wrong reading the response from Spark.\n\n\(describeDecodingError(decodingError))"
+        } else {
+            messageText = "Something went wrong sending your message.\n\n\(error.localizedDescription)"
+        }
+        streamingPreamble = ""
+        streamingTokens = ""
+        removeEphemeralMessages()
+        messages.append(
+            ChatMessage(
+                sender: .system,
+                text: messageText,
+                payloadType: .error,
+                displayBlocks: buildDisplayBlocks(from: messageText, enableInlineMarkdown: false, preserveStructure: false)
+            )
+        )
+        resetStatusState()
+        isSending = false
+        pendingScrollTarget = lastUserMessageID
+    }
+
+    private func finishStreamedAnswer(_ result: StreamResultPayload, answerID: String) {
+        streamingPreamble = ""
+        streamingTokens = ""
+        if let name = result.conversationName, !name.isEmpty {
+            conversationName = name
+        }
+        removeEphemeralMessages()
+        appendBackendMessages(result.messages, sender: .assistant, answerID: answerID)
+        repeatOffer = result.repeatOffer
+        lastAnswerHadData = result.hadData
+        lastAnswerText = result.responseText
+        upsertCurrentChatSummary()
+        resetStatusState()
+        isSending = false
+        pendingScrollTarget = lastUserMessageID
+
+        let chartCount = result.messages.filter { $0.type == "chart" }.count
+        let threadAtAnswer = threadID
+        Task { [weak self] in
+            await self?.loadFollowUpChip(chartCount: chartCount, threadAtAnswer: threadAtAnswer)
+        }
+    }
+
+    // MARK: - After an answer
+
+    /// The web's one chip under an answer. A repeat offer takes its place.
+    /// Charted answers get a caption prompt (the web's slide-deck chip opens
+    /// a web-only page, so the app leaves it out); other data answers ask
+    /// /suggest_followups/ and show its first suggestion.
+    private func loadFollowUpChip(chartCount: Int, threadAtAnswer: String) async {
+        guard repeatOffer == nil, lastAnswerHadData,
+              let answer = lastAnswerText, !answer.isEmpty else { return }
+        if chartCount > 0 {
+            followUpChip = "Write a caption for this chart"
+            return
+        }
+        guard let url = URL(string: "\(baseURL)/suggest_followups/") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "response_text": String(answer.prefix(800)),
+            "has_chart": false,
+        ])
+        guard let reply = try? await URLSession.shared.data(for: request.withAppIdentity()),
+              let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any],
+              let chips = json["chips"] as? [String],
+              let first = chips.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return }
+        // Drop a suggestion that arrives after the member moved on.
+        guard threadAtAnswer == threadID, !isSending, lastAnswerText == answer else { return }
+        followUpChip = first
+    }
+
+    /// Sends the chip as the next question.
+    func sendFollowUpChip() async {
+        guard let chip = followUpChip, !isSending else { return }
+        followUpChip = nil
+        inputText = chip
+        await sendCurrentMessage()
+    }
+
+    /// "Make this automatic": saves the last question as a recipe, then
+    /// schedules it, the same two calls the web makes. Needs the member's
+    /// Bearer token; the server refuses the typeable chat_user_id here.
+    func acceptRepeatOffer(cadence: String) async {
+        guard let offer = repeatOffer, let prompt = lastPrompt, !isAcceptingRepeatOffer else { return }
+        isAcceptingRepeatOffer = true
+        defer { isAcceptingRepeatOffer = false }
+        let thread = threadID
+
+        func post(_ path: String, _ body: [String: Any]) async -> [String: Any]? {
+            guard let url = URL(string: "\(baseURL)\(path)") else { return nil }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            guard let reply = try? await URLSession.shared.data(for: request.withAppIdentity()) else { return nil }
+            let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any]
+            if let http = reply.1 as? HTTPURLResponse, http.statusCode == 401 {
+                return ["ok": false, "error": "not_logged_in"]
+            }
+            return json
+        }
+
+        let saved = await post("/recipes/save/", ["prompt": prompt, "thread_id": thread])
+        guard let recipe = saved?["recipe"] as? [String: Any], let recipeID = recipe["id"] as? String else {
+            repeatOfferStatus = (saved?["error"] as? String) == "not_logged_in"
+                ? "Sign out and back in to turn this on."
+                : "Couldn't set that up. Try again in a minute."
+            return
+        }
+        let scheduled = await post("/schedules/save/", [
+            "recipe_id": recipeID,
+            "cadence": cadence,
+            "geo_label": offer.place,
+            "thread_id": thread,
+        ])
+        guard (scheduled?["ok"] as? Bool) == true else {
+            repeatOfferStatus = "Couldn't set that up. Try again in a minute."
+            return
+        }
+        repeatOffer = nil
+        repeatOfferStatus = "Done. Spark will email your \(offer.place) \(offer.kind) \(cadence == "weekly" ? "every week" : "every month")."
+    }
+
+    func dismissRepeatOffer() {
+        repeatOffer = nil
+    }
+
+    /// Thumbs up or down on an answer. Posts where the web does
+    /// (/submit_feedback_dev/); the server files it against the thread.
+    func sendFeedback(answerID: String, positive: Bool, note: String) async {
+        guard let url = URL(string: "\(baseURL)/submit_feedback_dev/") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "message_id": answerID,
+            "thread_id": threadID,
+            "feedback_type": positive ? "thumbs-up" : "thumbs-down",
+            "additional_feedback": note,
+        ])
+        _ = try? await URLSession.shared.data(for: request.withAppIdentity())
+    }
+
+    /// Why a stream ended without an answer. The polled path takes over.
+    private struct StreamFailure: Error {
+        let reason: String
+    }
+
+    /// The stream delivered its result but the app couldn't read it.
+    private struct StreamResultUnreadable: Error {
+        let underlying: Error
+    }
+
+    /// POSTs the question to /stream_query/ and reads its server-sent events
+    /// until the `result` event, updating the status panel and the live
+    /// preview as they arrive. Frames are single `data: {json}` lines with a
+    /// `kind` field; there are no `event:` lines and no done marker.
+    private func streamQuery(prompt: String, uniqueID: String, threadID: String) async throws -> StreamResultPayload {
+        var components = URLComponents(string: "\(baseURL)/stream_query/")!
+        // The server reads identity from the query string or the Bearer
+        // header, never from the JSON body.
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        guard let url = components.url else { throw StreamFailure(reason: "bad URL") }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        // The server gives up after 90 seconds without an event; wait past that.
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "prompt": prompt,
+            "thread_id": threadID,
+            "unique_id": uniqueID,
+            "plan_first": "auto",
+        ])
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request.withAppIdentity())
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw StreamFailure(reason: "HTTP \(code)")
+        }
+
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }  // ": open" comment, blanks
+            let json = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard let data = json.data(using: .utf8),
+                  let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let kind = event["kind"] as? String else { continue }
+
+            switch kind {
+            case "status":
+                guard let body = event["body"] as? String, !body.isEmpty else { continue }
+                appendStreamStatus(body, pct: (event["pct"] as? NSNumber)?.doubleValue)
+            case "preamble":
+                streamingPreamble += event["text"] as? String ?? ""
+            case "token":
+                streamingTokens += event["text"] as? String ?? ""
+            case "reset":
+                // The prose so far turned out to be a tool call.
+                streamingTokens = ""
+            case "charts_pending":
+                let count = (event["count"] as? NSNumber)?.intValue ?? 1
+                appendStreamStatus(count == 1 ? "Drawing your chart" : "Drawing \(count) charts", pct: nil)
+            case "result":
+                // A result that won't decode is not a stream failure: the
+                // question already ran, so show an error instead of re-asking.
+                do {
+                    return try JSONDecoder().decode(StreamResultPayload.self, from: data)
+                } catch {
+                    throw StreamResultUnreadable(underlying: error)
+                }
+            case "error":
+                throw StreamFailure(reason: event["message"] as? String ?? "stream error")
+            default:
+                continue  // plan_mode and anything newer
+            }
+        }
+        throw StreamFailure(reason: "stream ended without a result")
+    }
+
+    /// Adds a stage to the status panel. The stream sends stages one at a
+    /// time; the panel shows the list, like the polled path's check_status.
+    private func appendStreamStatus(_ text: String, pct: Double?) {
+        var current = statusMessages
+        // The placeholder shown before the first real stage.
+        if current.count == 1, current.first?.text == "Analyzing your question" {
+            current = []
+        }
+        current.append(
+            ChatMessage(
+                sender: .system,
+                text: text,
+                payloadType: .status,
+                isEphemeral: true,
+                displayBlocks: buildDisplayBlocks(from: text, enableInlineMarkdown: false, preserveStructure: false),
+                progressPct: pct ?? current.last?.progressPct
+            )
+        )
+        statusMessages = current
+        statusText = text
+    }
+
+    /// The older path: handle_user_query, then execute_sql while polling
+    /// check_status. Kept as the fallback for a failed stream.
+    private func sendByPolling(prompt: String) async {
         do {
             let uniqueID = try await generateUniqueID()
             let initial = try await handleUserQuery(
@@ -395,7 +729,7 @@ final class ChatManager: ObservableObject {
 
                 pollingTask?.cancel()
                 removeEphemeralMessages()
-                appendBackendMessages(final.messages, sender: .assistant)
+                appendBackendMessages(final.messages, sender: .assistant, answerID: "response" + uniqueID)
             } else {
                 removeEphemeralMessages()
             }
@@ -405,26 +739,7 @@ final class ChatManager: ObservableObject {
             pendingScrollTarget = lastUserMessageID
         } catch {
             debugLog("[Chat] send(prompt:) failed:", error)
-
-            let messageText: String
-            if let decodingError = error as? DecodingError {
-                messageText = "Something went wrong reading the response from Spark.\n\n\(describeDecodingError(decodingError))"
-            } else {
-                messageText = "Something went wrong sending your message.\n\n\(error.localizedDescription)"
-            }
-
-            removeEphemeralMessages()
-            messages.append(
-                ChatMessage(
-                    sender: .system,
-                    text: messageText,
-                    payloadType: .error,
-                    displayBlocks: buildDisplayBlocks(from: messageText, enableInlineMarkdown: false, preserveStructure: false)
-                )
-            )
-            resetStatusState()
-            isSending = false
-            pendingScrollTarget = lastUserMessageID
+            showSendError(error)
         }
     }
     private func upsertCurrentChatSummary() {
@@ -554,7 +869,8 @@ final class ChatManager: ObservableObject {
 
     private func appendBackendMessages(
         _ backendMessages: [BackendChatMessage],
-        sender: ChatSender
+        sender: ChatSender,
+        answerID: String? = nil
     ) {
         for item in backendMessages {
             let payload = ChatPayloadType(rawValue: item.type)
@@ -565,14 +881,16 @@ final class ChatManager: ObservableObject {
             case .status, .success, .hidden:
                 continue
             case .chart:
-                messages.append(
-                    ChatMessage(
-                        sender: .assistant,
-                        text: "",
-                        payloadType: payload,
-                        chartSpecJSON: text
+                for spec in chartSpecJSONs(from: item.body) {
+                    messages.append(
+                        ChatMessage(
+                            sender: .assistant,
+                            text: "",
+                            payloadType: payload,
+                            chartSpecJSON: spec
+                        )
                     )
-                )
+                }
             default:
                 messages.append(
                     ChatMessage(
@@ -583,10 +901,38 @@ final class ChatManager: ObservableObject {
                             from: text,
                             enableInlineMarkdown: sender == .assistant && payload != .gutslink,
                             preserveStructure: sender == .assistant && payload != .gutslink
-                        )
+                        ),
+                        // Only the answer prose takes feedback, as on the web.
+                        answerID: item.type == "response" ? answerID : nil
                     )
                 )
             }
+        }
+    }
+
+    /// One JSON string per chart. An answer with several charts sends a list
+    /// of specs as the body; read whole, the list decoded as no chart at all
+    /// and showed "Chart unavailable."
+    private func chartSpecJSONs(from body: FlexibleBody) -> [String] {
+        func serialize(_ object: Any) -> String? {
+            guard JSONSerialization.isValidJSONObject(object),
+                  let data = try? JSONSerialization.data(withJSONObject: object) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        switch body {
+        case .array(let items):
+            return items.compactMap { serialize($0.value) }
+        case .string(let raw):
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("["),
+               let data = trimmed.data(using: .utf8),
+               let list = (try? JSONSerialization.jsonObject(with: data)) as? [Any] {
+                return list.compactMap(serialize)
+            }
+            return trimmed.isEmpty ? [] : [trimmed]
+        default:
+            let text = body.textValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? [] : [text]
         }
     }
 
@@ -663,6 +1009,78 @@ final class ChatManager: ObservableObject {
             mutable.replaceCharacters(in: match.range(at: 0), with: "")
         }
         return (mutable as String).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Pulls out the blocks that become SparkCards. `pinlist` is claimed and
+    /// dropped: it lists pins for the web pinboard, which the app doesn't have.
+    private func extractSparkCards(from text: String) -> (cleanedText: String, cards: [SparkCard]) {
+        let pattern = #"```(insights|file|download|drawarea|pinlist)\s*\n([\s\S]*?)```"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return (text, [])
+        }
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        let matches = regex.matches(in: text, range: range)
+        if matches.isEmpty { return (text, []) }
+
+        var cards: [SparkCard] = []
+        for match in matches where match.numberOfRanges >= 3 {
+            let tag = nsText.substring(with: match.range(at: 1)).lowercased()
+            let body = nsText.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let data = body.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) else { continue }
+            if let card = sparkCard(tag: tag, json: json) {
+                cards.append(card)
+            }
+        }
+        let cleaned = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (cleaned, cards)
+    }
+
+    private func sparkCard(tag: String, json: Any) -> SparkCard? {
+        func string(_ dict: [String: Any], _ key: String) -> String? {
+            let value = (dict[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (value?.isEmpty == false) ? value : nil
+        }
+        switch tag {
+        case "insights":
+            let items = (json as? [[String: Any]] ?? []).compactMap { item -> SparkInsight? in
+                guard let headline = string(item, "headline") ?? string(item, "title") else { return nil }
+                return SparkInsight(
+                    headline: headline,
+                    geo: string(item, "geo"),
+                    direction: string(item, "direction"),
+                    change: string(item, "change"),
+                    valueFmt: string(item, "value_fmt"),
+                    reportDate: string(item, "report_date")
+                )
+            }
+            return items.isEmpty ? nil : .insights(items)
+        case "file":
+            guard let dict = json as? [String: Any],
+                  let raw = string(dict, "url") else { return nil }
+            let url = normalizedInternalURLString(from: raw)
+            // Same rule as the web: only the Hub itself or its file storage.
+            guard let host = URL(string: url)?.host,
+                  host == AppIdentity.hubHost || host.hasSuffix(".digitaloceanspaces.com") else { return nil }
+            return .file(SparkFileLink(
+                url: url,
+                name: string(dict, "name") ?? "Your file",
+                description: string(dict, "description")
+            ))
+        case "download":
+            guard let dict = json as? [String: Any] else { return nil }
+            return .download(
+                label: string(dict, "label") ?? "Your download",
+                webURL: "\(baseURL)/chat/\(threadID)/"
+            )
+        case "drawarea":
+            guard let dict = json as? [String: Any] else { return nil }
+            return .drawArea(name: string(dict, "name") ?? "this area", webURL: "\(baseURL)/area/")
+        default:
+            return nil  // pinlist
+        }
     }
 
     private func extractContentCards(from text: String) -> (cleanedText: String, cards: [ContentCardData]) {
@@ -820,7 +1238,8 @@ final class ChatManager: ObservableObject {
             .replacingOccurrences(of: "\r\n", with: "\n")
 
         let (textWithoutSources, sourceLinks) = extractSourcesBlock(from: normalizedText)
-        let (textWithoutCards, contentCards) = extractContentCards(from: textWithoutSources)
+        let (textWithoutSparkCards, sparkCards) = extractSparkCards(from: textWithoutSources)
+        let (textWithoutCards, contentCards) = extractContentCards(from: textWithoutSparkCards)
         // After the blocks this client renders have been claimed, anything still
         // fenced belongs to another client and shouldn't be shown as text.
         let textCleaned = stripUnknownFences(from: textWithoutCards)
@@ -1010,6 +1429,17 @@ final class ChatManager: ObservableObject {
                 tableData: nil,
                 relatedLinks: nil,
                 contentCardData: card
+            ))
+        }
+
+        for card in sparkCards {
+            result.append(ChatDisplayBlock(
+                kind: .sparkCard,
+                plainText: "",
+                attributedText: nil,
+                tableData: nil,
+                relatedLinks: nil,
+                sparkCard: card
             ))
         }
 

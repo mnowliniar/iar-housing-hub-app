@@ -29,6 +29,38 @@ enum ChatDisplayBlockKind: Equatable {
     case bullet
     case table
     case contentCard
+    case sparkCard
+}
+
+/// A card for a fenced block Spark sends besides charts, sources and
+/// post/email/script/one-sheet content.
+enum SparkCard: Equatable {
+    /// ```insights: the insight engine's stories about a place.
+    case insights([SparkInsight])
+    /// ```file: a data export (CSV/XLSX/PDF) Spark built for this answer.
+    case file(SparkFileLink)
+    /// ```download: a PowerPoint deck or PNG zip. Those are assembled by the
+    /// web page, so the card hands off to this thread on the web.
+    case download(label: String, webURL: String)
+    /// ```drawarea: Spark doesn't know the neighborhood and needs it drawn.
+    /// The drawing tool is on the web.
+    case drawArea(name: String, webURL: String)
+}
+
+struct SparkInsight: Equatable, Identifiable {
+    let id = UUID()
+    let headline: String
+    let geo: String?
+    let direction: String?
+    let change: String?
+    let valueFmt: String?
+    let reportDate: String?
+}
+
+struct SparkFileLink: Equatable {
+    let url: String
+    let name: String
+    let description: String?
 }
 
 struct ContentCardData: Equatable {
@@ -132,6 +164,7 @@ struct ChatDisplayBlock: Identifiable, Equatable {
     let tableData: ChatTableData?
     let relatedLinks: [ChatRelatedLink]?
     let contentCardData: ContentCardData?
+    let sparkCard: SparkCard?
 
     init(
         kind: ChatDisplayBlockKind,
@@ -139,7 +172,8 @@ struct ChatDisplayBlock: Identifiable, Equatable {
         attributedText: AttributedString?,
         tableData: ChatTableData?,
         relatedLinks: [ChatRelatedLink]?,
-        contentCardData: ContentCardData? = nil
+        contentCardData: ContentCardData? = nil,
+        sparkCard: SparkCard? = nil
     ) {
         self.kind = kind
         self.plainText = plainText
@@ -147,6 +181,7 @@ struct ChatDisplayBlock: Identifiable, Equatable {
         self.tableData = tableData
         self.relatedLinks = relatedLinks
         self.contentCardData = contentCardData
+        self.sparkCard = sparkCard
     }
 }
 
@@ -270,6 +305,64 @@ struct CheckStatusResponse: Decodable {
     let messages: [BackendChatMessage]
 }
 
+/// The final `result` event of /stream_query/. `messages` carries the same
+/// response/chart/guts/gutslink items the older two-call path returns; the
+/// rest only exists on the stream.
+struct StreamResultPayload: Decodable {
+    let messages: [BackendChatMessage]
+    let conversationName: String?
+    /// True when the agent ran data tools. Drives the follow-up chip.
+    let hadData: Bool
+    /// The answer text, first 800 characters, for follow-up suggestions.
+    let responseText: String?
+    let repeatOffer: RepeatOffer?
+
+    enum CodingKeys: String, CodingKey {
+        case messages
+        case conversationName = "conversation_name"
+        case hadData = "had_data"
+        case responseText = "response_text"
+        case repeatOffer = "repeat_offer"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        messages = try c.decode([BackendChatMessage].self, forKey: .messages)
+        conversationName = try? c.decodeIfPresent(String.self, forKey: .conversationName)
+        hadData = (try? c.decodeIfPresent(Bool.self, forKey: .hadData)) ?? false
+        responseText = try? c.decodeIfPresent(String.self, forKey: .responseText)
+        // An offer the app can't read must never cost the member the answer.
+        repeatOffer = try? c.decodeIfPresent(RepeatOffer.self, forKey: .repeatOffer)
+    }
+}
+
+/// "Make this automatic": the server noticed the member asked for the same
+/// piece (post, email, one-sheet...) for the same place on an earlier day.
+struct RepeatOffer: Decodable, Equatable {
+    let kind: String
+    let geoID: String
+    let place: String
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case geoID = "geo_id"
+        case place
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind)
+        place = (try? c.decode(String.self, forKey: .place)) ?? ""
+        if let s = try? c.decode(String.self, forKey: .geoID) {
+            geoID = s
+        } else if let n = try? c.decode(Int.self, forKey: .geoID) {
+            geoID = String(n)
+        } else {
+            geoID = ""
+        }
+    }
+}
+
 struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let sender: ChatSender
@@ -282,6 +375,9 @@ struct ChatMessage: Identifiable, Equatable {
     /// dynamic now ("Looking up Median Sale Price for Hamilton County"), so the
     /// bar can't be inferred from the text any more.
     let progressPct: Double?
+    /// "response" + the question's unique_id, the id the web gives an answer
+    /// for feedback. Only set on answers from this session.
+    let answerID: String?
 
     init(
         sender: ChatSender,
@@ -290,7 +386,8 @@ struct ChatMessage: Identifiable, Equatable {
         isEphemeral: Bool = false,
         chartSpecJSON: String? = nil,
         displayBlocks: [ChatDisplayBlock]? = nil,
-        progressPct: Double? = nil
+        progressPct: Double? = nil,
+        answerID: String? = nil
     ) {
         self.sender = sender
         self.text = text
@@ -299,6 +396,7 @@ struct ChatMessage: Identifiable, Equatable {
         self.chartSpecJSON = chartSpecJSON
         self.displayBlocks = displayBlocks
         self.progressPct = progressPct
+        self.answerID = answerID
     }
 }
 

@@ -126,6 +126,44 @@ struct ChatView: View {
                                 }
                             )
                             .id(message.id)
+
+                            if let answerID = message.answerID {
+                                AnswerFeedbackBar { positive, note in
+                                    Task { await chat.sendFeedback(answerID: answerID, positive: positive, note: note) }
+                                }
+                            }
+                        }
+
+                        if let preview = chat.streamingText {
+                            StreamingPreviewBubble(text: preview)
+                        }
+
+                        if !chat.isSending {
+                            if let offer = chat.repeatOffer {
+                                RepeatOfferCard(
+                                    offer: offer,
+                                    isWorking: chat.isAcceptingRepeatOffer,
+                                    onAccept: { cadence in Task { await chat.acceptRepeatOffer(cadence: cadence) } },
+                                    onDismiss: { chat.dismissRepeatOffer() }
+                                )
+                            } else if let chip = chat.followUpChip {
+                                Button {
+                                    Task { await chat.sendFollowUpChip() }
+                                } label: {
+                                    Label(chip, systemImage: "arrow.turn.down.right")
+                                        .font(.subheadline)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Capsule().stroke(BrandColors.teal.opacity(0.5), lineWidth: 1))
+                                        .foregroundStyle(BrandColors.teal)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if let status = chat.repeatOfferStatus {
+                                Text(status)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .padding()
@@ -319,6 +357,121 @@ private struct ChatBubble: View {
             return Color.red.opacity(0.12)
         default:
             return Color(.secondarySystemBackground)
+        }
+    }
+}
+
+/// Thumbs up or down under an answer. Down asks what was wrong, like the
+/// web's feedback modal; the note is optional.
+private struct AnswerFeedbackBar: View {
+    let onSend: (_ positive: Bool, _ note: String) -> Void
+    @State private var sent: Bool?
+    @State private var askingWhy = false
+    @State private var note = ""
+
+    var body: some View {
+        HStack(spacing: 14) {
+            if let sent {
+                Label(sent ? "Thanks" : "Thanks, noted", systemImage: sent ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    sent = true
+                    onSend(true, "")
+                } label: {
+                    Image(systemName: "hand.thumbsup")
+                }
+                .accessibilityLabel("Good answer")
+                Button {
+                    askingWhy = true
+                } label: {
+                    Image(systemName: "hand.thumbsdown")
+                }
+                .accessibilityLabel("Bad answer")
+            }
+            Spacer()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .buttonStyle(.plain)
+        .padding(.leading, 12)
+        .alert("What was wrong?", isPresented: $askingWhy) {
+            TextField("Optional", text: $note)
+            Button("Send") {
+                sent = false
+                onSend(false, note)
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+}
+
+/// "Make this automatic": the member asked for the same piece for the same
+/// place on an earlier day. Mirrors the web card: monthly, weekly, dismiss.
+private struct RepeatOfferCard: View {
+    let offer: RepeatOffer
+    let isWorking: Bool
+    let onAccept: (_ cadence: String) -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Make this automatic")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Spark writes your \(offer.place) \(offer.kind) each time new data lands.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+            }
+            HStack(spacing: 10) {
+                Button("Send monthly") { onAccept("monthly") }
+                    .buttonStyle(.borderedProminent)
+                Button("Send weekly") { onAccept("weekly") }
+                    .buttonStyle(.bordered)
+                if isWorking {
+                    ProgressView()
+                }
+            }
+            .tint(BrandColors.teal)
+            .font(.subheadline)
+            .disabled(isWorking)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+}
+
+/// The answer while it streams, as plain text in an assistant bubble. The
+/// finished answer replaces it with full formatting, charts and cards.
+private struct StreamingPreviewBubble: View {
+    let text: String
+
+    var body: some View {
+        HStack {
+            Text(text)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .animation(.easeOut(duration: 0.15), value: text)
+            Spacer(minLength: 40)
         }
     }
 }
@@ -755,9 +908,140 @@ private struct RichChatText: View {
                             ContentCardView(card: card)
                         }
                     }
+                case .sparkCard:
+                    if let card = block.sparkCard {
+                        SparkCardView(card: card)
+                    }
                 }
             }
         }
+    }
+}
+
+private struct SparkCardView: View {
+    let card: SparkCard
+
+    var body: some View {
+        switch card {
+        case .insights(let items):
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(items) { item in
+                        SparkInsightCard(insight: item)
+                    }
+                }
+            }
+        case .file(let file):
+            linkRow(
+                systemImage: "arrow.down.doc",
+                title: file.name,
+                subtitle: file.description ?? "Download the data",
+                url: file.url
+            )
+        case .download(let label, let webURL):
+            linkRow(
+                systemImage: "square.and.arrow.down.on.square",
+                title: label,
+                subtitle: "Decks and image bundles download from Spark on the web",
+                url: webURL
+            )
+        case .drawArea(let name, let webURL):
+            linkRow(
+                systemImage: "scribble.variable",
+                title: "Draw \(name) on the map",
+                subtitle: "Spark doesn't know this area yet. Draw it on the web, then ask again.",
+                url: webURL
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func linkRow(systemImage: String, title: String, subtitle: String, url: String) -> some View {
+        if let destination = URL(string: url) {
+            Link(destination: destination) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: systemImage)
+                        .font(.title3)
+                        .foregroundStyle(BrandColors.teal)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.systemBackground))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct SparkInsightCard: View {
+    let insight: SparkInsight
+
+    private var arrow: String? {
+        switch insight.direction?.lowercased() {
+        case "up": return "arrow.up.right"
+        case "down": return "arrow.down.right"
+        default: return nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                if let arrow {
+                    Image(systemName: arrow)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(BrandColors.teal)
+                }
+                if let geo = insight.geo {
+                    Text(geo)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Text(insight.headline)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(4)
+                .fixedSize(horizontal: false, vertical: true)
+            if let value = insight.valueFmt {
+                Text(insight.change.map { "\(value) · \($0)" } ?? value)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let date = insight.reportDate {
+                Text(date)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .frame(width: 230, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
