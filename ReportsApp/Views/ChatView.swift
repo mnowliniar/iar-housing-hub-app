@@ -18,6 +18,9 @@ struct ChatView: View {
     @State private var activeGutsContent: GutsModalContent?
     @State private var showingChatList = false
     @State private var showingFiles = false
+    /// A recipe from Home that needs an area or market focus before it runs.
+    @State private var recipeSetup: SparkRecipe?
+    @StateObject private var runLibrary = SparkLibraryModel()
     @State private var isConsumingSparkPrompt = false
 
     private func associatedGutsText(for index: Int) -> String? {
@@ -65,6 +68,34 @@ struct ChatView: View {
 
         await chat.send(prompt: prompt)
         isConsumingSparkPrompt = false
+    }
+
+    /// A recipe Home asked Spark to run.
+    @MainActor
+    private func runRequestedRecipeIfNeeded() async {
+        guard let recipe = app.recipeToRun else { return }
+        app.recipeToRun = nil
+        if recipe.needsArea || recipe.segment?.asks == true {
+            if runLibrary.catalog == nil {
+                runLibrary.catalog = try? await SparkLibraryService.segmentCatalog()
+            }
+            recipeSetup = recipe
+            return
+        }
+        if let prepared = await runLibrary.prepareRun(recipe, geo: "", segmentValues: []) {
+            startRun(prepared)
+        }
+    }
+
+    private func startRun(_ prepared: PreparedRecipeRun) {
+        Task {
+            await chat.runRecipe(
+                prompt: prepared.prompt,
+                display: prepared.display,
+                planFirst: prepared.planFirst,
+                recipeRunID: prepared.runID
+            )
+        }
     }
 
     /// A chat opened from a universal link.
@@ -278,9 +309,26 @@ struct ChatView: View {
         .task {
             await consumeSparkPromptIfNeeded()
             await openLinkedThreadIfNeeded()
+            await runRequestedRecipeIfNeeded()
         }
         .onChange(of: app.sparkThreadToOpen) { _, _ in
             Task { await openLinkedThreadIfNeeded() }
+        }
+        .onChange(of: app.recipeToRun) { _, _ in
+            Task { await runRequestedRecipeIfNeeded() }
+        }
+        .sheet(item: $recipeSetup) { recipe in
+            NavigationStack {
+                RecipeSetupSheet(recipe: recipe, purpose: .run, catalog: runLibrary.catalog) { geo, values, _ in
+                    guard let prepared = await runLibrary.prepareRun(recipe, geo: geo, segmentValues: values) else {
+                        let message = runLibrary.errorMessage ?? "Couldn't start this recipe."
+                        runLibrary.errorMessage = nil
+                        return message
+                    }
+                    startRun(prepared)
+                    return nil
+                }
+            }
         }
         .onChange(of: app.sparkPrompt) { _, _ in
             Task {

@@ -127,6 +127,28 @@ enum SparkLibraryService {
         _ = try await post("/schedules/run/", ["id": id], timeout: 300)
     }
 
+    // MARK: - Web pages the app has no screen for
+
+    /// A one-time link that opens `path` on the web signed in as this member
+    /// (the slides and report editors, neighborhood snapshots). Needs the
+    /// Bearer token; the server refuses the typeable chat_user_id here.
+    static func webLink(path: String) async throws -> URL {
+        guard let url = URL(string: base + "/app/web-link/") else { throw ServiceError(message: "Bad address") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["next": path])
+        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            throw ServiceError(message: "Sign out and back in to open the web from the app.")
+        }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let link = json["url"] as? String, let result = URL(string: link) else {
+            throw ServiceError(message: "The Hub didn't send a link back.")
+        }
+        return result
+    }
+
     // MARK: - Plumbing
 
     private static func recipe(from json: [String: Any]) throws -> SparkRecipe {

@@ -115,6 +115,8 @@ final class AppState: ObservableObject {
     @Published var sparkThreadToOpen: String? = nil
     /// A market page to open, from a universal link.
     @Published var marketGeoID: String? = nil
+    /// A recipe to run in Spark, from Home's launcher.
+    @Published var recipeToRun: SparkRecipe? = nil
     @Published var activeReport: ActiveReport? = nil
     @Published var showDigest: Bool = false
 

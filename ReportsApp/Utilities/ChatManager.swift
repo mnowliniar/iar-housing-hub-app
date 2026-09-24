@@ -623,22 +623,7 @@ final class ChatManager: ObservableObject {
     /// A one-time link that opens `path` on the web signed in as this member,
     /// for the web's report and slides editors.
     func webLink(path: String) async throws -> URL {
-        guard let url = URL(string: "\(baseURL)/app/web-link/") else { throw URLError(.badURL) }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["next": path])
-        let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
-        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
-            throw NSError(domain: "ChatManager", code: 401, userInfo: [
-                NSLocalizedDescriptionKey: "Sign out and back in to open the web editors from the app.",
-            ])
-        }
-        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let link = json["url"] as? String, let result = URL(string: link) else {
-            throw URLError(.badServerResponse)
-        }
-        return result
+        try await SparkLibraryService.webLink(path: path)
     }
 
     // MARK: - After an answer

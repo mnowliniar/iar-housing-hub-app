@@ -198,9 +198,17 @@ struct Sparkline: View {
         .padding(.top, 2)
         .chartOverlay { proxy in
             GeometryReader { geo in
+                // Shared with the page's scroll instead of claiming the touch
+                // (a claimed zero-distance drag meant a swipe that started on
+                // a chart could never scroll Home). Sideways drags scrub; up
+                // and down scrolls.
                 Rectangle().fill(.clear).contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0)
+                    .simultaneousGesture(DragGesture(minimumDistance: 8)
                         .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else {
+                                selectedX = nil
+                                return
+                            }
                             // Map x-location to nearest integer domain
                             let origin = geo[proxy.plotAreaFrame].origin
                             let plotX = value.location.x - origin.x

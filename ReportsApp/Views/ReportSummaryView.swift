@@ -133,15 +133,20 @@ struct ReportSummaryView: View {
         )
         .task {
             debugLog("Loading summary for \(geo.geoid), \(updateDate)")
+            await loadSummary()
             // Fired here rather than in ReportDetailView: the Home rail's
             // "all reports" list opens this view directly, and those views
-            // went uncounted.
+            // went uncounted. After the load, so the title and area name are
+            // the report's own: the web's habit rows ("Your reports") are
+            // built from these fields, as the web's own report views send them.
             EventTracker.fire(.viewReports, metadata: [
                 "report_id": String(report.id),
+                "report_title": summary?.title ?? report.title,
                 "geo_id": String(geo.geoid),
+                "geo_label": summary?.geo ?? geo.displayName,
+                "proptype": "all",
                 "surface": "ios_app",
             ])
-            await loadSummary()
         }
         .sheet(item: $exportItem) { item in
             WebReportPrintView(url: item.url)
