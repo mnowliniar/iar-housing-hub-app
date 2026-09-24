@@ -102,7 +102,7 @@ final class DashboardService {
           "&facts=\(facts.joined(separator: ","))" +
           "&fmt=nested&compose=0&window=12&order=asc"
         )!
-        print("url: \(url)")
+        debugLog("url: \(url)")
         var req = URLRequest(url: url)
         if let tag = etagForURL[url.absoluteString] {
             req.addValue(tag, forHTTPHeaderField: "If-None-Match")
@@ -110,8 +110,8 @@ final class DashboardService {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
 #if DEBUG
-        print("DashboardService status:", (resp as? HTTPURLResponse)?.statusCode ?? -1)
-        if let s = String(data: data, encoding: .utf8) { print("DashboardService payload prefix:", s.prefix(200)) }
+        debugLog("DashboardService status:", (resp as? HTTPURLResponse)?.statusCode ?? -1)
+        if let s = String(data: data, encoding: .utf8) { debugLog("DashboardService payload prefix:", s.prefix(200)) }
 #endif
         if let http = resp as? HTTPURLResponse,
            let et = http.value(forHTTPHeaderField: "ETag") { etagForURL[url.absoluteString] = et }
@@ -476,72 +476,33 @@ struct MarketDashboardView: View {
         )
         .task {
             await loadCurrentGeo()
-            isLoading = true
-            showSkeletonTiles = true
-            showLoadedTiles = false
-            do {
-                let svc = DashboardService()
-                let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
-                tiles = Array(fetched.prefix(3))
-            } catch {
-#if DEBUG
-                print("Dashboard load error:", error)
-#endif
-                tiles = []
-            }
-            isLoading = false
-            withAnimation(.easeInOut(duration: 0.25)) {
-                showLoadedTiles = true
-                showSkeletonTiles = false
-            }
+            await reloadTiles()
         }
-        .onChange(of: app.selectedGeoID) { newValue in
+        .onChange(of: app.selectedGeoID) { _, newValue in
+            // The tiles follow dashboardGeoID, not selectedGeoID. Opening a
+            // favorite market changes selectedGeoID, and this handler used to
+            // raise the skeleton with nothing left to lower it.
             app.userPrefs.app.selectedGeoID = newValue
-            showLoadedTiles = false
             app.saveUserPrefs()
-            isLoading = true
-            showSkeletonTiles = true
-            showLoadedTiles = false
         }
-        .onChange(of: app.userPrefs.app.dashboardVizIDs) { _ in
+        .onChange(of: app.userPrefs.app.dashboardVizIDs) { _, _ in
             app.saveUserPrefs()
-            isLoading = true
-            showSkeletonTiles = true
-            showLoadedTiles = false
+            Task { await reloadTiles() }
+        }
+        .onChange(of: app.userPrefs.app.dashboardGeoID) { _, _ in
+            // Fires for the picker and for saved prefs arriving after first
+            // load; before, the latter updated the name but not the tiles.
             Task {
-                let svc = DashboardService()
-                do {
-                    let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
-                    tiles = Array(fetched.prefix(3))
-                } catch { tiles = [] }
-                isLoading = false
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showLoadedTiles = true
-                    showSkeletonTiles = false
-                }
+                await loadCurrentGeo()
+                await reloadTiles()
             }
         }
         .sheet(isPresented: $showGeoPicker) {
             GeoPickerSheet(onSelectGeo: { newGeo in
                 app.selectedGeoID = newGeo
                 app.userPrefs.app.dashboardGeoID = newGeo
-                Task { await loadCurrentGeo() }
+                app.saveUserPrefs()
                 showGeoPicker = false
-                isLoading = true
-                showSkeletonTiles = true
-                showLoadedTiles = false
-                Task {
-                    let svc = DashboardService()
-                    do {
-                        let fetched = try await svc.fetchTiles(geoID: selectedGeoID, vizIDs: vizIDs)
-                        tiles = Array(fetched.prefix(3))
-                    } catch { tiles = [] }
-                    isLoading = false
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        showLoadedTiles = true
-                        showSkeletonTiles = false
-                    }
-                }
             })
         }
         .sheet(isPresented: $showVizPicker) {
@@ -552,13 +513,32 @@ struct MarketDashboardView: View {
                 }
             ))
         }
-        .onChange(of: app.userPrefs.app.dashboardGeoID) { _ in
-            Task {
-                await loadCurrentGeo()
-            }
-        }
         .navigationTitle("Dashboard")
     }
+    /// Fetches the three tiles for the current dashboard market and metrics.
+    /// A reply that arrives after the market or metrics changed again is
+    /// dropped, so a slow earlier request can't overwrite a newer one.
+    private func reloadTiles() async {
+        let geo = selectedGeoID
+        let ids = vizIDs
+        isLoading = true
+        showSkeletonTiles = true
+        showLoadedTiles = false
+        var fetched: [Tile] = []
+        do {
+            fetched = Array(try await DashboardService().fetchTiles(geoID: geo, vizIDs: ids).prefix(3))
+        } catch {
+            debugLog("Dashboard load error:", error)
+        }
+        guard geo == selectedGeoID, ids == vizIDs else { return }
+        tiles = fetched
+        isLoading = false
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showLoadedTiles = true
+            showSkeletonTiles = false
+        }
+    }
+
     private func loadCurrentGeo() async {
         let trimmedID = selectedGeoID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty else {
@@ -568,9 +548,9 @@ struct MarketDashboardView: View {
 
         isLoadingGeo = true
         defer { isLoadingGeo = false }
-        print("[Dashboard] loadCurrentGeo selectedGeoID:", trimmedID)
+        debugLog("[Dashboard] loadCurrentGeo selectedGeoID:", trimmedID)
         activeGeo = await APIService.fetchGeo(geoid: trimmedID)
-        print("[Dashboard] activeGeo displayName:", activeGeo?.displayName)
+        debugLog("[Dashboard] activeGeo displayName:", activeGeo?.displayName)
     }
 
     private var dashboardWideSkeletonLayout: some View {
@@ -717,7 +697,7 @@ struct VizPickerView: View {
         } catch {
             await MainActor.run { self.isLoading = false }
 #if DEBUG
-            print("viz fetch failed:", error)
+            debugLog("viz fetch failed:", error)
 #endif
         }
     }
