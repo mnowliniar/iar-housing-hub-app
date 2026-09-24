@@ -63,9 +63,35 @@ struct SubscriptionMarket: Decodable, Identifiable {
 
 struct DigestGroup: Decodable, Identifiable {
     let date: String
+    /// "yyyy-MM-dd". Newer servers send it; older ones only send `date`.
+    let dateISO: String?
     let reports: [DigestReportEntry]
 
     var id: String { date }
+
+    /// The report update date in the "yyyy-MM-dd" form the report summary
+    /// endpoint takes. Falls back to parsing the display date
+    /// ("September 17, 2026") when the server doesn't send `date_iso`.
+    var updateDate: String? {
+        if let dateISO, !dateISO.isEmpty { return dateISO }
+        let posix = Locale(identifier: "en_US_POSIX")
+        let input = DateFormatter()
+        input.locale = posix
+        input.timeZone = TimeZone(secondsFromGMT: 0)
+        input.dateFormat = "MMMM d, yyyy"
+        guard let d = input.date(from: date) else { return nil }
+        let output = DateFormatter()
+        output.locale = posix
+        output.timeZone = TimeZone(secondsFromGMT: 0)
+        output.dateFormat = "yyyy-MM-dd"
+        return output.string(from: d)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case dateISO = "date_iso"
+        case reports
+    }
 }
 
 struct DigestReportEntry: Decodable, Identifiable {

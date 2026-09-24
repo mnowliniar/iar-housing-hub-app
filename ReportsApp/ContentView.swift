@@ -112,6 +112,18 @@ struct ContentView: View {
                 }
                 .tag(2)
             }
+            // Digest "Open" sets activeReport. Only the iPad branch presented
+            // it, so on iPhone the button did nothing.
+            .sheet(item: $app.activeReport) { active in
+                NavigationStack {
+                    ReportDetailView(report: active.report, geo: active.geo, updateDate: active.updateDate)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Close") { app.activeReport = nil }
+                            }
+                        }
+                }
+            }
         }
     }
 }

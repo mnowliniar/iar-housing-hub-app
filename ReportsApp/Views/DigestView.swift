@@ -60,7 +60,7 @@ struct DigestView: View {
                             report: report,
                             market: market,
                             geo: market.geoIDInt.flatMap { geoCache[$0] },
-                            onOpen: { openReport(report: report, market: market) },
+                            onOpen: { openReport(report: report, market: market, updateDate: group.updateDate) },
                             onToggle: { await toggleSubscription(geoID: market.geoID, reportID: report.reportID, proptype: market.proptype) }
                         )
                     }
@@ -96,12 +96,15 @@ struct DigestView: View {
         }
     }
 
-    private func openReport(report: DigestReportEntry, market: DigestMarket) {
-        guard let geo = market.geoIDInt.flatMap({ geoCache[$0] }) else { return }
+    private func openReport(report: DigestReportEntry, market: DigestMarket, updateDate: String?) {
+        // An empty date made the summary fetch fail every time, so the row
+        // always opened on "Failed to load report."
+        guard let geo = market.geoIDInt.flatMap({ geoCache[$0] }),
+              let updateDate else { return }
         app.activeReport = ActiveReport(
             report: Report(id: report.reportID, title: report.title),
             geo: geo,
-            updateDate: ""
+            updateDate: updateDate
         )
     }
 
