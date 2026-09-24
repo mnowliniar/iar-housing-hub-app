@@ -269,12 +269,12 @@ private struct ChatBubble: View {
 
     private func debugChartJSON(_ json: String?) -> String? {
         if let json {
-            print("[Chart] message.chartSpecJSON:")
-            print(json)
+            debugLog("[Chart] message.chartSpecJSON:")
+            debugLog(json)
             return json
         }
 
-        print("[Chart] chartSpecJSON is nil")
+        debugLog("[Chart] chartSpecJSON is nil")
         return nil
     }
 
@@ -283,7 +283,7 @@ private struct ChatBubble: View {
             return data
         }
 
-        print("[Chart] could not convert spec to utf8 data")
+        debugLog("[Chart] could not convert spec to utf8 data")
         return nil
     }
 
@@ -291,7 +291,7 @@ private struct ChatBubble: View {
         do {
             return try JSONDecoder().decode(AIChartSpec.self, from: data)
         } catch {
-            print("[Chart] decode failed:", error)
+            debugLog("[Chart] decode failed:", error)
             return nil
         }
     }
@@ -475,6 +475,7 @@ private struct ChartCardView: View {
                 Button {
                     if let image = renderChartImage(height: 220) {
                         UIPasteboard.general.image = image
+                        EventTracker.fireSpark(.sparkCopy, kind: "chart_image", target: spec.title)
                         didCopy = true
                         Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(1200))
@@ -492,6 +493,7 @@ private struct ChartCardView: View {
                         Button {
                             if let image = renderExportImage(layout: layout) {
                                 shareItem = ChartShareItem(image: image)
+                                EventTracker.fireSpark(.sparkExport, kind: "chart_\(layout.rawValue)", target: spec.title)
                             }
                         } label: {
                             Label(layout.title, systemImage: layout.systemImage)
@@ -785,6 +787,7 @@ private struct ContentCardView: View {
                     } else {
                         UIPasteboard.general.string = card.copyPlainText
                     }
+                    EventTracker.fireSpark(.sparkCopy, kind: card.kind, target: card.copyPlainText)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {
@@ -923,7 +926,9 @@ private struct OnesheetCardView: View {
     private func download() async {
         state = .building
         do {
-            var request = URLRequest(url: URL(string: "\(ChatManager.serverBaseURL)/onesheet/pdf/")!)
+            // The server logs spark_export for this download; chat_user_id
+            // lets it credit the member instead of dropping the event.
+            var request = URLRequest(url: URL(string: "\(ChatManager.serverBaseURL)/onesheet/pdf/")!.appendingChatUserID())
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = card.content.data(using: .utf8)
@@ -1188,15 +1193,20 @@ private struct ChatTableView: View {
         return ([headerLine] + rowLines).joined(separator: "\n")
     }
 
+    /// Called from `body`, so it runs on every render. A fresh UUID per call
+    /// wrote a new temp file each pass; naming the file by its contents and
+    /// skipping the write when it exists keeps it to one file per table.
     private func makeCSVFile() -> URL? {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("spark-table-\(UUID().uuidString).csv")
+        let csv = tableAsCSV
+        let name = "spark-table-\(String(UInt(bitPattern: csv.hashValue), radix: 36)).csv"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: url.path) { return url }
 
         do {
-            try tableAsCSV.write(to: url, atomically: true, encoding: .utf8)
+            try csv.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
-            print("Failed to write CSV:", error)
+            debugLog("Failed to write CSV:", error)
             return nil
         }
     }
@@ -1242,6 +1252,7 @@ private struct ChatTableView: View {
             HStack(spacing: 16) {
                 Button {
                     UIPasteboard.general.string = tableAsTSV
+                    EventTracker.fireSpark(.sparkCopy, kind: "table", target: table.headers.joined(separator: ","))
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                         .font(.caption)
@@ -1254,6 +1265,10 @@ private struct ChatTableView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
+                    // ShareLink has no action hook; count the tap that opens it.
+                    .simultaneousGesture(TapGesture().onEnded {
+                        EventTracker.fireSpark(.sparkExport, kind: "table_csv", target: table.headers.joined(separator: ","))
+                    })
                 }
             }
             .foregroundStyle(.secondary)

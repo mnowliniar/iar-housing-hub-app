@@ -198,6 +198,7 @@ struct FavoriteMarketsRail: View {
         app.userPrefs.app.favoriteMarketIDs = ids
         geoLookup[geo.geoid] = geo
         app.saveUserPrefs()
+        EventTracker.fire(.favoriteMarkets, metadata: ["geo_id": String(geo.geoid)])
         NotificationScheduler.isUndetermined { undetermined in
             if undetermined {
                 showNotificationRationale = true
@@ -817,6 +818,9 @@ struct ReportCard: View {
         }
         app.userPrefs.app.favoriteReportIDs = ids
         app.saveUserPrefs()
+        if wasAdding, ids.contains(item.report_id) {
+            EventTracker.fire(.favoriteReports, metadata: ["report_id": String(item.report_id)])
+        }
         if wasAdding {
             NotificationScheduler.isUndetermined { undetermined in
                 if undetermined {

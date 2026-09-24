@@ -512,6 +512,13 @@ struct MarketView: View {
         if let image = renderer.uiImage,
            let share = InsightShareItem.make(image: image, title: capitalizedInsightHeadline(insight)) {
             shareItem = share
+            // Same event as the web's insight chart download, which also
+            // completes the "weekly post" onboarding step.
+            EventTracker.fire(.downloadInsightChart, metadata: [
+                "viz_id": String(insight.vizID ?? 0),
+                "insight_type": insight.type ?? "",
+                "geo_id": String(insight.geoID ?? 0),
+            ])
         }
     }
 
@@ -895,6 +902,13 @@ struct InsightsView: View {
         if let image = renderer.uiImage,
            let share = InsightShareItem.make(image: image, title: capitalizedInsightHeadline(insight)) {
             shareItem = share
+            // Same event as the web's insight chart download, which also
+            // completes the "weekly post" onboarding step.
+            EventTracker.fire(.downloadInsightChart, metadata: [
+                "viz_id": String(insight.vizID ?? 0),
+                "insight_type": insight.type ?? "",
+                "geo_id": String(insight.geoID ?? 0),
+            ])
         }
     }
 

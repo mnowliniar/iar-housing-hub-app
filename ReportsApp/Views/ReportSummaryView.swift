@@ -55,6 +55,11 @@ struct ReportSummaryView: View {
                                     guard let url = makeWebReportURL() else { return }
                                     debugLog("Export URL:", url.absoluteString)
                                     exportItem = ExportURLItem(url: url)
+                                    EventTracker.fire(.exportChart, metadata: [
+                                        "kind": "report_print",
+                                        "report_id": String(report.id),
+                                        "geo_id": String(geo.geoid),
+                                    ])
                                 } label: {
                                     Label("Print", systemImage: "printer")
                                         .labelStyle(.iconOnly)
@@ -128,6 +133,14 @@ struct ReportSummaryView: View {
         )
         .task {
             debugLog("Loading summary for \(geo.geoid), \(updateDate)")
+            // Fired here rather than in ReportDetailView: the Home rail's
+            // "all reports" list opens this view directly, and those views
+            // went uncounted.
+            EventTracker.fire(.viewReports, metadata: [
+                "report_id": String(report.id),
+                "geo_id": String(geo.geoid),
+                "surface": "ios_app",
+            ])
             await loadSummary()
         }
         .sheet(item: $exportItem) { item in
@@ -165,7 +178,8 @@ struct ReportSummaryView: View {
     }
 
     func fetchShareURL() async -> URL? {
-        guard let url = URL(string: "https://data.indianarealtors.com/api/create-report-share/") else { return nil }
+        // chat_user_id lets the server credit the member with copy_share_link.
+        guard let url = URL(string: "https://data.indianarealtors.com/api/create-report-share/")?.appendingChatUserID() else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
