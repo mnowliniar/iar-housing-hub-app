@@ -407,11 +407,29 @@ struct ChatSummary: Identifiable, Decodable, Equatable {
     let name: String
     let created: String?
     let updated: String?
+    /// Set when a recipe run made this chat. The list marks those rows.
+    var run: ChatRunInfo? = nil
 
     enum CodingKeys: String, CodingKey {
         case threadID = "thread_id"
         case name
         case created
         case updated
+        case run
+    }
+}
+
+struct ChatRunInfo: Decodable, Equatable {
+    let runID: Int?
+    let recipeID: String?
+    let scheduleID: String?
+    /// manual | schedule | run_now
+    let trigger: String?
+
+    enum CodingKeys: String, CodingKey {
+        case runID = "run_id"
+        case recipeID = "recipe_id"
+        case scheduleID = "schedule_id"
+        case trigger
     }
 }

@@ -228,12 +228,24 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showingChatList) {
             NavigationStack {
-                ChatListSheet(chatManager: chat) { item in
-                    showingChatList = false
-                    Task {
-                        await chat.loadChat(threadID: item.id)
+                SparkSidebarSheet(
+                    chatManager: chat,
+                    onOpenThread: { threadID in
+                        showingChatList = false
+                        Task { await chat.loadChat(threadID: threadID) }
+                    },
+                    onStartRun: { prepared in
+                        showingChatList = false
+                        Task {
+                            await chat.runRecipe(
+                                prompt: prepared.prompt,
+                                display: prepared.display,
+                                planFirst: prepared.planFirst,
+                                recipeRunID: prepared.runID
+                            )
+                        }
                     }
-                }
+                )
             }
         }
         .task {
@@ -2099,109 +2111,8 @@ private struct SparkChartView: View {
         }
     }
 }
-private struct ChatListSheet: View {
-    @ObservedObject var chatManager: ChatManager
-    let onSelectChat: (ChatSummary) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        chatListContent
-            .navigationTitle("Chats")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await chatManager.fetchChats() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-            }
-            .task {
-                if chatManager.chats.isEmpty {
-                    await chatManager.fetchChats()
-                }
-            }
-    }
-
-    @ViewBuilder
-    private var chatListContent: some View {
-        if chatManager.isLoadingChats && chatManager.chats.isEmpty {
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("Loading chats…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        } else if let error = chatManager.chatListError, chatManager.chats.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.title2)
-                    .foregroundStyle(.orange)
-
-                Text("Couldn’t load chats")
-                    .font(.headline)
-
-                Text(error)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                Button("Try Again") {
-                    Task { await chatManager.fetchChats() }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        } else if chatManager.chats.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-
-                Text("No saved chats yet")
-                    .font(.headline)
-
-                Text("Your recent conversations will show up here.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        } else {
-            List {
-                ForEach(chatManager.chats) { item in
-                    Button {
-                        onSelectChat(item)
-                    } label: {
-                        ChatListRow(item: item)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            Task {
-                                await chatManager.deleteChat(threadID: item.id)
-                            }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-        }
-    }
-}
-
-private struct ChatListRow: View {
+/// One conversation in the Spark sidebar (SparkLibraryView.swift).
+struct ChatListRow: View {
     let item: ChatSummary
 
     private var timestampText: String? {

@@ -21,6 +21,9 @@ final class ChatManager: ObservableObject {
     @Published var chats: [ChatSummary] = []
     @Published var isLoadingChats = false
     @Published var chatListError: String?
+    /// More chats exist before the loaded ones ("Show older chats").
+    @Published var hasOlderChats = false
+    private var olderChatsCursor: String?
     /// The answer as it streams in: the opening line, then the prose tokens.
     /// Both clear when the final result replaces them.
     @Published var streamingPreamble: String = ""
@@ -62,12 +65,18 @@ final class ChatManager: ObservableObject {
         }
         return storedThreadID
     }
+    /// First page of the chat list, as the web sidebar loads it: the last two
+    /// weeks (at least the newest 8). Chats a schedule made are left out
+    /// here and show up under Runs and in search.
     func fetchChats(anonymousThreadIDs: [String] = []) async {
         isLoadingChats = true
         chatListError = nil
 
         do {
-            chats = try await listChats(anonymousThreadIDs: anonymousThreadIDs)
+            let page = try await listChats(["filenames": anonymousThreadIDs])
+            chats = page.chats
+            hasOlderChats = page.more ?? false
+            olderChatsCursor = page.nextBefore
         } catch {
             chatListError = error.localizedDescription
         }
@@ -75,50 +84,49 @@ final class ChatManager: ObservableObject {
         isLoadingChats = false
     }
 
-    private func listChats(anonymousThreadIDs: [String]) async throws -> [ChatSummary] {
-        struct ListChatsRequest: Encodable {
-            let filenames: [String]
-            let chat_user_id: String?
+    /// "Show older chats": the next page before the last one loaded.
+    func loadOlderChats() async {
+        guard let before = olderChatsCursor, !isLoadingChats else { return }
+        isLoadingChats = true
+        defer { isLoadingChats = false }
+        do {
+            let page = try await listChats(["before": before])
+            let known = Set(chats.map(\.id))
+            chats += page.chats.filter { !known.contains($0.id) }
+            hasOlderChats = page.more ?? false
+            olderChatsCursor = page.nextBefore
+        } catch {
+            debugLog("[Chat] loadOlderChats failed:", error)
         }
+    }
 
-        let url = URL(string: "\(baseURL)/list_chats/")!
-        var request = URLRequest(url: url)
+    /// Server-side search over every chat's name and first question,
+    /// scheduled-run chats included, like the web's search box.
+    func searchChats(_ query: String) async -> [ChatSummary] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        return (try? await listChats(["q": q, "limit": 50]).chats) ?? []
+    }
+
+    private func listChats(_ body: [String: Any]) async throws -> ListChatsResponse {
+        // Identity rides the query string or the Bearer header; the server
+        // never reads chat_user_id from a JSON body, so sending it there
+        // left members with pre-token sessions an empty list.
+        var components = URLComponents(string: "\(baseURL)/list_chats/")!
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id")
-        debugLog("[Chat] listChats chat_user_id from defaults:", chatUserID ?? "nil")
-
-        let payload = ListChatsRequest(
-            filenames: anonymousThreadIDs,
-            chat_user_id: chatUserID
-        )
-        request.httpBody = try JSONEncoder().encode(payload)
-
-        debugLog("[Chat] listChats URL:", url.absoluteString)
-        debugLog("[Chat] listChats request headers:", request.allHTTPHeaderFields ?? [:])
-        debugLog("[Chat] listChats anonymousThreadIDs:", anonymousThreadIDs)
-
-        let sharedCookies = HTTPCookieStorage.shared.cookies(for: url) ?? []
-        if sharedCookies.isEmpty {
-            debugLog("[Chat] listChats shared cookies: none")
-        } else {
-            debugLog("[Chat] listChats shared cookies:")
-            for cookie in sharedCookies {
-                debugLog("- \(cookie.name)=\(cookie.value); domain=\(cookie.domain); path=\(cookie.path)")
-            }
-            let cookieHeader = HTTPCookie.requestHeaderFields(with: sharedCookies)
-            debugLog("[Chat] listChats computed cookie header:", cookieHeader)
-        }
+        var payload = body
+        if payload["filenames"] == nil { payload["filenames"] = [String]() }
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
 
         if let http = response as? HTTPURLResponse {
             debugLog("[Chat] listChats status:", http.statusCode)
-            debugLog("[Chat] listChats response headers:", http.allHeaderFields)
-        }
-        if let raw = String(data: data, encoding: .utf8) {
-            debugLog("[Chat] listChats raw response:", raw)
         }
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -130,11 +138,18 @@ final class ChatManager: ObservableObject {
             )
         }
 
-        let decoded = try JSONDecoder().decode(ListChatsResponse.self, from: data)
-        return decoded.chats
+        return try JSONDecoder().decode(ListChatsResponse.self, from: data)
     }
     private struct ListChatsResponse: Decodable {
         let chats: [ChatSummary]
+        let more: Bool?
+        let nextBefore: String?
+
+        enum CodingKeys: String, CodingKey {
+            case chats
+            case more
+            case nextBefore = "next_before"
+        }
     }
 
     func loadChat(threadID: String) async {
@@ -396,7 +411,23 @@ final class ChatManager: ObservableObject {
         await send(prompt: prompt)
     }
 
-    func send(prompt: String) async {
+    /// Runs a recipe the way the web does: a fresh chat whose question reads
+    /// "Recipe · place" while the built prompt goes to the server, which
+    /// links the run to the chat through `recipeRunID`.
+    func runRecipe(prompt: String, display: String, planFirst: Bool?, recipeRunID: Int?) async {
+        guard !isSending else { return }
+        newChat()
+        let userMessage = ChatMessage(
+            sender: .user,
+            text: display,
+            displayBlocks: buildDisplayBlocks(from: display, enableInlineMarkdown: false, preserveStructure: false)
+        )
+        messages.append(userMessage)
+        lastUserMessageID = userMessage.id
+        await send(prompt: prompt, display: display, planFirst: planFirst, recipeRunID: recipeRunID)
+    }
+
+    func send(prompt: String, display: String? = nil, planFirst: Bool? = nil, recipeRunID: Int? = nil) async {
         isSending = true
         clearAnswerExtras()
         statusMessages = [
@@ -418,7 +449,10 @@ final class ChatManager: ObservableObject {
         // over a display problem.
         do {
             let uniqueID = try await generateUniqueID()
-            let result = try await streamQuery(prompt: prompt, uniqueID: uniqueID, threadID: sendingThreadID)
+            let result = try await streamQuery(
+                prompt: prompt, uniqueID: uniqueID, threadID: sendingThreadID,
+                display: display, planFirst: planFirst, recipeRunID: recipeRunID
+            )
             guard sendingThreadID == threadID else {
                 abandonAnswer()  // the member started a new chat meanwhile
                 return
@@ -612,7 +646,14 @@ final class ChatManager: ObservableObject {
     /// until the `result` event, updating the status panel and the live
     /// preview as they arrive. Frames are single `data: {json}` lines with a
     /// `kind` field; there are no `event:` lines and no done marker.
-    private func streamQuery(prompt: String, uniqueID: String, threadID: String) async throws -> StreamResultPayload {
+    private func streamQuery(
+        prompt: String,
+        uniqueID: String,
+        threadID: String,
+        display: String? = nil,
+        planFirst: Bool? = nil,
+        recipeRunID: Int? = nil
+    ) async throws -> StreamResultPayload {
         var components = URLComponents(string: "\(baseURL)/stream_query/")!
         // The server reads identity from the query string or the Bearer
         // header, never from the JSON body.
@@ -627,12 +668,18 @@ final class ChatManager: ObservableObject {
         request.timeoutInterval = 120
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        var body: [String: Any] = [
             "prompt": prompt,
             "thread_id": threadID,
             "unique_id": uniqueID,
-            "plan_first": "auto",
-        ])
+            // A recipe says whether to plan first; a typed question lets the
+            // server decide.
+            "plan_first": planFirst.map { $0 as Any } ?? "auto",
+        ]
+        // The label saved as the member's message instead of the built prompt.
+        if let display, !display.isEmpty { body["display"] = display }
+        if let recipeRunID { body["recipe_run_id"] = recipeRunID }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (bytes, response) = try await URLSession.shared.bytes(for: request.withAppIdentity())
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
