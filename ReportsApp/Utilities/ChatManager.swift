@@ -65,10 +65,10 @@ final class ChatManager: ObservableObject {
     /// there.
     static func newThreadID() -> String { UUID().uuidString.lowercased() }
 
-    /// The web's report and slides editors can open this chat. Chats the app
-    /// started before ids went lowercase can't be.
+    /// The web's report and slides editors can open this chat once it has
+    /// an answer. The server takes the uppercase ids older versions made.
     var canOpenOnWeb: Bool {
-        !messages.isEmpty && threadID == threadID.lowercased()
+        !messages.isEmpty
     }
 
     /// A new chat screen starts empty, so it starts a new thread. The id used
@@ -615,7 +615,11 @@ final class ChatManager: ObservableObject {
 
     /// The open chat's pinboard.
     func loadPins() async -> [SparkPin] {
-        var components = URLComponents(string: "\(baseURL)/load_pins/")!
+        await Self.fetchPins(threadID: threadID)
+    }
+
+    private static func fetchPins(threadID: String) async -> [SparkPin] {
+        var components = URLComponents(string: "\(serverBaseURL)/load_pins/")!
         var items = [URLQueryItem(name: "thread_id", value: threadID)]
         if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
             items.append(URLQueryItem(name: "chat_user_id", value: chatUserID))
@@ -626,6 +630,76 @@ final class ChatManager: ObservableObject {
               let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any],
               let raw = json["pins"] as? [[String: Any]] else { return [] }
         return raw.compactMap(SparkPin.init(json:))
+    }
+
+    // MARK: - Pin uses
+
+    /// What was done with a pin, in the web's step words. The web pinboard
+    /// shows "Copied" or "Downloaded" on the pin instead of "Not used yet".
+    enum PinUse: String {
+        case copied
+        case exported
+    }
+
+    /// Which of the open chat's pins a use belongs to.
+    enum PinMatch {
+        case id(String)
+        /// A post, email or script, by its text.
+        case text(String)
+        case chartTitle(String)
+        case allCharts
+    }
+
+    /// Records a use on the open chat's pin. Static because the chat's cards
+    /// don't hold the chat manager; the open chat is the stored thread id,
+    /// as EventTracker reads it. Quiet: the app logs its own spark_copy and
+    /// spark_export events, so the server doesn't log a second one.
+    static func recordPinUse(_ use: PinUse, _ match: PinMatch) {
+        guard let thread = UserDefaults.standard.string(forKey: "currentChatThreadID"), !thread.isEmpty else { return }
+        Task {
+            var ids = matchingPinIDs(match, in: [])
+            if ids.isEmpty {
+                ids = matchingPinIDs(match, in: await fetchPins(threadID: thread))
+            }
+            if ids.isEmpty {
+                // A fresh answer's pins can still be saving.
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                ids = matchingPinIDs(match, in: await fetchPins(threadID: thread))
+            }
+            for id in ids {
+                await postStep(threadID: thread, stepID: "ns:\(use.rawValue):\(id)")
+            }
+        }
+    }
+
+    private static func matchingPinIDs(_ match: PinMatch, in pins: [SparkPin]) -> [String] {
+        func clean(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        switch match {
+        case .id(let id):
+            return [id]
+        case .text(let text):
+            let wanted = clean(text)
+            return pins.filter { pin in clean(pin.text ?? "") == wanted && !wanted.isEmpty }.map { $0.id }
+        case .chartTitle(let title):
+            let wanted = clean(title)
+            return pins.filter { pin in pin.type == "chart" && clean(pin.label) == wanted && !wanted.isEmpty }.map { $0.id }
+        case .allCharts:
+            return pins.filter { $0.type == "chart" }.map { $0.id }
+        }
+    }
+
+    private static func postStep(threadID: String, stepID: String) async {
+        var components = URLComponents(string: "\(serverBaseURL)/save_step/")!
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        guard let url = components.url else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["thread_id": threadID, "step_id": stepID, "quiet": true]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        _ = try? await URLSession.shared.data(for: request.withAppIdentity())
     }
 
     /// A one-time link that opens `path` on the web signed in as this member,

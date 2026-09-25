@@ -720,6 +720,7 @@ private struct ChartCardView: View {
                     if let image = renderChartImage(height: 220) {
                         UIPasteboard.general.image = image
                         EventTracker.fireSpark(.sparkCopy, kind: "chart_image", target: spec.title)
+                        if let title = spec.title { ChatManager.recordPinUse(.copied, .chartTitle(title)) }
                         didCopy = true
                         Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(1200))
@@ -738,6 +739,7 @@ private struct ChartCardView: View {
                             if let image = renderExportImage(layout: layout) {
                                 shareItem = ChartShareItem(image: image)
                                 EventTracker.fireSpark(.sparkExport, kind: "chart_\(layout.rawValue)", target: spec.title)
+                                if let title = spec.title { ChatManager.recordPinUse(.exported, .chartTitle(title)) }
                             }
                         } label: {
                             Label(layout.title, systemImage: layout.systemImage)
@@ -949,7 +951,7 @@ private struct SparkFilesSheet: View {
             } footer: {
                 Text(chat.canOpenOnWeb
                      ? "Opens on the Hub, signed in as you. Tap any text to edit it."
-                     : "Chats started in earlier versions of the app can't open in the web editors. New chats can.")
+                     : "Ask something first. The pages are built from what the chat makes.")
             }
 
             if loadingPins {
@@ -1041,6 +1043,7 @@ private struct SparkFilesSheet: View {
             )
             deckFile = DeckFileItem(url: url)
             EventTracker.fireSpark(.sparkExport, kind: "deck", target: "\(chartJSONs.count) charts")
+            ChatManager.recordPinUse(.exported, .allCharts)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1077,6 +1080,7 @@ private struct SparkPinRow: View {
                     UIPasteboard.general.string = text
                     copied = true
                     EventTracker.fireSpark(.sparkCopy, kind: pin.type, target: text)
+                    ChatManager.recordPinUse(.copied, .id(pin.id))
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
@@ -1474,6 +1478,7 @@ private struct ContentCardView: View {
                         UIPasteboard.general.string = card.copyPlainText
                     }
                     EventTracker.fireSpark(.sparkCopy, kind: card.kind, target: card.copyPlainText)
+                    ChatManager.recordPinUse(.copied, .text(card.content))
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {
