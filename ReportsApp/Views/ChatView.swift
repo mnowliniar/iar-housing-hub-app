@@ -912,7 +912,7 @@ private struct SparkFilesSheet: View {
                 if chartJSONs.isEmpty {
                     Text("Ask for a chart and it can go into a deck.")
                 } else {
-                    Text("One chart per slide, with its title. Arrange the deck on the web with Edit slides.")
+                    Text("One chart per slide, with its title. To arrange the deck, open Slides below.")
                 }
             }
 
@@ -922,7 +922,16 @@ private struct SparkFilesSheet: View {
                         Task { await open(editor.path) }
                     } label: {
                         HStack {
-                            Label(editor.title, systemImage: editor.icon)
+                            Label {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(editor.title)
+                                    Text(editor.subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: editor.icon)
+                            }
                             Spacer()
                             if openingPath == editor.path {
                                 ProgressView()
@@ -936,10 +945,10 @@ private struct SparkFilesSheet: View {
                     .disabled(!chat.canOpenOnWeb || openingPath != nil)
                 }
             } header: {
-                Text("Edit on the web")
+                Text("On the web")
             } footer: {
                 Text(chat.canOpenOnWeb
-                     ? "Opens the Hub's editors signed in as you."
+                     ? "Opens on the Hub, signed in as you. Tap any text to edit it."
                      : "Chats started in earlier versions of the app can't open in the web editors. New chats can.")
             }
 
@@ -993,6 +1002,7 @@ private struct SparkFilesSheet: View {
 
     private struct WebEditor {
         let title: String
+        let subtitle: String
         let icon: String
         let path: String
     }
@@ -1000,10 +1010,10 @@ private struct SparkFilesSheet: View {
     private var webEditors: [WebEditor] {
         let base = "/chat/\(chat.threadID)"
         return [
-            WebEditor(title: "Edit slides", icon: "rectangle.stack", path: "\(base)/slides/"),
-            WebEditor(title: "Edit report", icon: "doc.text", path: "\(base)/report/"),
-            WebEditor(title: "One-pager", icon: "doc.richtext", path: "\(base)/onepager/"),
-            WebEditor(title: "All files", icon: "folder", path: "\(base)/files/"),
+            WebEditor(title: "Slides", subtitle: "Preview, download or edit", icon: "rectangle.stack", path: "\(base)/slides/"),
+            WebEditor(title: "Report", subtitle: "Preview, download or edit", icon: "doc.text", path: "\(base)/report/"),
+            WebEditor(title: "One-pager", subtitle: "Preview, download or edit", icon: "doc.richtext", path: "\(base)/onepager/"),
+            WebEditor(title: "All files", subtitle: "Everything this chat made", icon: "folder", path: "\(base)/files/"),
         ]
     }
 
