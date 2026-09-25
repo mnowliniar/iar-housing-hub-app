@@ -71,6 +71,14 @@ final class ChatManager: ObservableObject {
         !messages.isEmpty && threadID == threadID.lowercased()
     }
 
+    /// A new chat screen starts empty, so it starts a new thread. The id used
+    /// to outlive a relaunch while the messages didn't: the next question
+    /// went into the old thread, with its pins and history, behind an empty
+    /// screen. The old chat is still in the chat list.
+    init() {
+        storedThreadID = ""
+    }
+
     var threadID: String {
         if storedThreadID.isEmpty {
             storedThreadID = Self.newThreadID()
