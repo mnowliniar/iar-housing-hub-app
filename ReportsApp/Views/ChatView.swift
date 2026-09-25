@@ -1049,9 +1049,12 @@ private struct SparkPinRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(pin.label)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
+            // A chart draws its own title; the label on top printed it twice.
+            if chartSpec == nil {
+                Text(pin.label)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+            }
             if let spec = chartSpec {
                 SparkChartView(spec: spec)
                     .frame(height: 170)
