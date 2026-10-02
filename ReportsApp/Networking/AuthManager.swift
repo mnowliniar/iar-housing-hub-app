@@ -14,6 +14,9 @@ final class AuthManager: ObservableObject {
     @Published var state: AuthState = .launching
     @Published var session: AuthSession?
     @Published var showLoginSheet = false
+    /// Shown on the sign-in screen when the server no longer accepts the
+    /// saved sign-in.
+    @Published var signInNote: String?
 
     private let sessionAccount = "auth_session"
     var onSignedIn: (() -> Void)?
@@ -58,6 +61,7 @@ final class AuthManager: ObservableObject {
             }
             self.state = .signedIn
             onSignedIn?()
+            Task { await verifySession() }
         } catch {
             debugLog("[Auth] restoreSession failed:", error)
             clearSession()
@@ -141,6 +145,7 @@ final class AuthManager: ObservableObject {
             )
 
             try persistSession(newSession)
+            signInNote = nil
             self.session = newSession
             AppIdentity.authorization = authHeader()
             if let chatUserID = newSession.chatUserID {
@@ -158,6 +163,25 @@ final class AuthManager: ObservableObject {
     func logout() {
         clearSession()
         state = .signedOut
+    }
+
+    /// Sign-ins made before late September 2026 don't name the member on the
+    /// server, so recipes, schedules, pin uses and the web pages turn them
+    /// away until the member signs in again. /recipes/ trusts only the
+    /// token, so "logged_in": false there means the server no longer knows
+    /// this sign-in. Then the app goes back to the sign-in screen with a
+    /// note, once. No answer (offline, server down) changes nothing.
+    func verifySession() async {
+        guard state == .signedIn,
+              let url = URL(string: "https://data.indianarealtors.com/recipes/"),
+              let reply = try? await URLSession.shared.data(for: .app(url)),
+              (reply.1 as? HTTPURLResponse)?.statusCode == 200,
+              let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any],
+              let loggedIn = json["logged_in"] as? Bool else { return }
+        guard !loggedIn, state == .signedIn else { return }
+        debugLog("[Auth] the server no longer accepts this sign-in; asking again")
+        signInNote = "The app has been updated. Sign in once more to turn on the new features."
+        logout()
     }
 
     func authHeader() -> String? {

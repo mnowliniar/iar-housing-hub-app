@@ -28,7 +28,7 @@ struct LoginView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
 
-                    Text("Sign in with your member account to access reports and dashboards.")
+                    Text(auth.signInNote ?? "Sign in with your member account to access reports and dashboards.")
                         .foregroundStyle(.white.opacity(0.9))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
