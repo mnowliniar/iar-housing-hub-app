@@ -126,7 +126,6 @@
 			membershipExceptions = (
 				Info.plist,
 				Models/MonthlyVM.swift,
-				ReportsApp.entitlements,
 				Views/WatchHomeView.swift,
 				Views/WatchSettingsView.swift,
 			);
