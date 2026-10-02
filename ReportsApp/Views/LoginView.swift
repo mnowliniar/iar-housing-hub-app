@@ -28,7 +28,7 @@ struct LoginView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
 
-                    Text(auth.signInNote ?? "Sign in with your member account to access reports and dashboards.")
+                    Text("Sign in with your member account to access reports and dashboards.")
                         .foregroundStyle(.white.opacity(0.9))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
@@ -55,10 +55,6 @@ struct LoginView: View {
                     .foregroundStyle(.white.opacity(0.85))
                     .padding(.bottom, 20)
             }
-        }
-        .sheet(isPresented: $auth.showLoginSheet) {
-            SafariView(url: auth.loginStartURL)
-                .ignoresSafeArea()
         }
     }
 }

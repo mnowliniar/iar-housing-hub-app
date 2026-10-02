@@ -22,6 +22,10 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if auth.needsFreshSignIn {
+                    FreshSignInCard()
+                }
+
                 // 1) Dashboard section
                 MarketDashboardView(geoID: app.selectedGeoID)
 
@@ -76,6 +80,36 @@ struct HomeView: View {
     }
 }
 
+
+/// Shown when the server can't tell whose sign-in this is (it predates the
+/// app naming the member and couldn't be repaired). One tap signs in
+/// again in place; with Safari still holding the member's login it takes
+/// a moment and asks nothing.
+private struct FreshSignInCard: View {
+    @EnvironmentObject var auth: AuthManager
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.badge.key")
+                .font(.title3)
+                .foregroundStyle(BrandColors.teal)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("One more sign-in")
+                    .font(.subheadline.weight(.semibold))
+                Text("The update needs it for recipes, schedules and the web pages.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Sign in") { auth.signInAgain() }
+                .buttonStyle(.borderedProminent)
+                .tint(BrandColors.teal)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal)
+    }
+}
 
 struct AllReportsListView: View {
     let reports: [ReportListItem]

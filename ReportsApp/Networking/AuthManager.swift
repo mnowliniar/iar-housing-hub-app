@@ -14,9 +14,11 @@ final class AuthManager: ObservableObject {
     @Published var state: AuthState = .launching
     @Published var session: AuthSession?
     @Published var showLoginSheet = false
-    /// Shown on the sign-in screen when the server no longer accepts the
-    /// saved sign-in.
-    @Published var signInNote: String?
+    /// The server can't tell who this sign-in belongs to (it predates the
+    /// token naming the member, and couldn't be repaired), so recipes,
+    /// schedules and the web pages won't work until the member signs in
+    /// once more. Home shows a card; the sign-in happens in place.
+    @Published var needsFreshSignIn = false
 
     private let sessionAccount = "auth_session"
     var onSignedIn: (() -> Void)?
@@ -73,6 +75,14 @@ final class AuthManager: ObservableObject {
         showLoginSheet = true
     }
 
+    /// Opens the sign-in sheet over whatever is on screen. When Safari
+    /// still holds the member's WordPress login, it completes on its own in
+    /// a moment; otherwise it is the usual sign-in form. The app stays on
+    /// the same page either way.
+    func signInAgain() {
+        showLoginSheet = true
+    }
+
     func handleIncomingURL(_ url: URL) {
         showLoginSheet = false
         guard url.scheme?.lowercased() == "iarhousinghub" else { return }
@@ -101,7 +111,10 @@ final class AuthManager: ObservableObject {
     }
 
     func exchangeCode(_ code: String) async {
-        state = .signingIn
+        // Signing in again from inside the app keeps the screen it is on;
+        // only a sign-in from the sign-in screen shows the spinner.
+        let wasSignedIn = state == .signedIn
+        if !wasSignedIn { state = .signingIn }
 
         var request = URLRequest(url: appExchangeURL)
         request.httpMethod = "POST"
@@ -118,13 +131,13 @@ final class AuthManager: ObservableObject {
             responseData = data
 
             guard let http = response as? HTTPURLResponse else {
-                state = .error("No server response")
+                if !wasSignedIn { state = .error("No server response") }
                 return
             }
 
             guard (200...299).contains(http.statusCode) else {
                 let message = String(data: data, encoding: .utf8) ?? "Exchange failed"
-                state = .error(message)
+                if !wasSignedIn { state = .error(message) }
                 return
             }
 
@@ -132,7 +145,7 @@ final class AuthManager: ObservableObject {
 
             guard let expiresAt = parseServerDate(decoded.expiresAt) else {
                 debugLog("[Auth] exchangeCode invalid expiresAt:", decoded.expiresAt)
-                state = .error("Invalid expiration date from server")
+                if !wasSignedIn { state = .error("Invalid expiration date from server") }
                 return
             }
 
@@ -145,18 +158,18 @@ final class AuthManager: ObservableObject {
             )
 
             try persistSession(newSession)
-            signInNote = nil
             self.session = newSession
             AppIdentity.authorization = authHeader()
             if let chatUserID = newSession.chatUserID {
                 UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
             }
+            needsFreshSignIn = false
             self.state = .signedIn
             onSignedIn?()
         } catch {
             debugLog("[Auth] exchange decode error:", error)
             debugLog("[Auth] raw response:", responseData.flatMap { String(data: $0, encoding: .utf8) } ?? "nil")
-            state = .error("Sign-in failed")
+            if !wasSignedIn { state = .error("Sign-in failed") }
         }
     }
 
@@ -167,21 +180,24 @@ final class AuthManager: ObservableObject {
 
     /// Sign-ins made before late September 2026 don't name the member on the
     /// server, so recipes, schedules, pin uses and the web pages turn them
-    /// away until the member signs in again. /recipes/ trusts only the
-    /// token, so "logged_in": false there means the server no longer knows
-    /// this sign-in. Then the app goes back to the sign-in screen with a
-    /// note, once. No answer (offline, server down) changes nothing.
+    /// away. At launch the server repairs the sign-in itself when it can
+    /// (from the member's newer sign-ins); when it can't, Home asks for one
+    /// more sign-in, done in place. No answer (offline, server down)
+    /// changes nothing.
     func verifySession() async {
         guard state == .signedIn,
-              let url = URL(string: "https://data.indianarealtors.com/recipes/"),
-              let reply = try? await URLSession.shared.data(for: .app(url)),
-              (reply.1 as? HTTPURLResponse)?.statusCode == 200,
-              let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any],
-              let loggedIn = json["logged_in"] as? Bool else { return }
-        guard !loggedIn, state == .signedIn else { return }
-        debugLog("[Auth] the server no longer accepts this sign-in; asking again")
-        signInNote = "The app has been updated. Sign in once more to turn on the new features."
-        logout()
+              let url = URL(string: "https://data.indianarealtors.com/app/token/refresh/") else { return }
+        var request = URLRequest.app(url)
+        request.httpMethod = "POST"
+        guard let reply = try? await URLSession.shared.data(for: request),
+              let json = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any] else { return }
+        if (json["ok"] as? Bool) == true {
+            if (json["repaired"] as? Bool) == true { debugLog("[Auth] the server repaired this sign-in") }
+            needsFreshSignIn = false
+        } else if (json["error"] as? String) == "sign_in_needed" {
+            debugLog("[Auth] the server can't tell whose sign-in this is; asking for one more")
+            needsFreshSignIn = true
+        }
     }
 
     func authHeader() -> String? {

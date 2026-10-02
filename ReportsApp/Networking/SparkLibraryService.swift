@@ -12,6 +12,8 @@ import Foundation
 enum SparkLibraryService {
     struct ServiceError: LocalizedError {
         let message: String
+        /// The server can't tell whose sign-in this is; a fresh sign-in fixes it.
+        var needsSignIn = false
         var errorDescription: String? { message }
     }
 
@@ -141,7 +143,7 @@ enum SparkLibraryService {
         let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401 {
-            throw ServiceError(message: "Sign out and back in to open the web from the app.")
+            throw ServiceError(message: "Sign in again to open this.", needsSignIn: true)
         }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let link = json["url"] as? String, let result = URL(string: link) else {
@@ -189,7 +191,8 @@ enum SparkLibraryService {
         try check(response, data)
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         if (json["ok"] as? Bool) == false {
-            throw ServiceError(message: friendly(json["error"] as? String))
+            let code = json["error"] as? String
+            throw ServiceError(message: friendly(code), needsSignIn: code == "not_logged_in")
         }
         return json
     }
@@ -197,13 +200,14 @@ enum SparkLibraryService {
     private static func check(_ response: URLResponse, _ data: Data) throws {
         guard let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) else { return }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        throw ServiceError(message: friendly(json?["error"] as? String, status: http.statusCode))
+        let code = json?["error"] as? String
+        throw ServiceError(message: friendly(code, status: http.statusCode), needsSignIn: code == "not_logged_in")
     }
 
     private static func friendly(_ code: String?, status: Int = 0) -> String {
         let text = code ?? ""
         switch text {
-        case "not_logged_in": return "Sign out and back in to use recipes on this device."
+        case "not_logged_in": return "Sign in again to use recipes on this device."
         case "recipe_not_found": return "That recipe isn't there any more."
         case "not_found": return "That schedule isn't there any more."
         case "": return status > 0 ? "The Hub answered \(status). Try again in a minute." : "Something went wrong. Try again in a minute."

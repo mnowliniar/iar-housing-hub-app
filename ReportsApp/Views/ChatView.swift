@@ -867,6 +867,7 @@ private struct DeckFileItem: Identifiable {
 /// one-pager (opened signed in), and everything pinned.
 private struct SparkFilesSheet: View {
     @ObservedObject var chat: ChatManager
+    @EnvironmentObject var auth: AuthManager
     @Environment(\.dismiss) private var dismiss
     @State private var pins: [SparkPin] = []
     @State private var loadingPins = true
@@ -877,6 +878,11 @@ private struct SparkFilesSheet: View {
     @State private var errorMessage: String?
     /// The web page whose signed-in link failed, offered in Safari instead.
     @State private var failedWebPath: String?
+    /// The page to open once the member has signed in again.
+    @State private var pathAfterSignIn: String?
+    /// The sign-in sheet, shown from here: a sheet can't be opened from
+    /// behind this one.
+    @State private var signingIn = false
     @Environment(\.openURL) private var openURL
 
     private var chartJSONs: [String] {
@@ -998,6 +1004,17 @@ private struct SparkFilesSheet: View {
             SafariView(url: item.url)
                 .ignoresSafeArea()
         }
+        .sheet(isPresented: $signingIn) {
+            SafariView(url: auth.loginStartURL)
+                .ignoresSafeArea()
+        }
+        // Signed in again: open the page that asked for it.
+        .onChange(of: auth.session?.accessToken) { _, _ in
+            signingIn = false
+            guard let path = pathAfterSignIn, auth.state == .signedIn else { return }
+            pathAfterSignIn = nil
+            Task { await open(path) }
+        }
         // An alert, not a row: the row sat under the pinboard, so a failed
         // tap looked like a spinner and then nothing.
         .alert(
@@ -1044,6 +1061,14 @@ private struct SparkFilesSheet: View {
             webLink = WebLinkItem(url: url)
         } catch {
             debugLog("[Files] web link failed for", path, error.localizedDescription)
+            if let service = error as? SparkLibraryService.ServiceError, service.needsSignIn {
+                // Sign in right here, then come back to this page; no
+                // signing out, no finding the chat again.
+                auth.needsFreshSignIn = true
+                pathAfterSignIn = path
+                signingIn = true
+                return
+            }
             failedWebPath = path
             errorMessage = error.localizedDescription
         }

@@ -772,7 +772,7 @@ final class ChatManager: ObservableObject {
         let saved = await post("/recipes/save/", ["prompt": prompt, "thread_id": thread])
         guard let recipe = saved?["recipe"] as? [String: Any], let recipeID = recipe["id"] as? String else {
             repeatOfferStatus = (saved?["error"] as? String) == "not_logged_in"
-                ? "Sign out and back in to turn this on."
+                ? "Sign in again on Home to turn this on."
                 : "Couldn't set that up. Try again in a minute."
             return
         }

@@ -421,7 +421,7 @@ struct SparkManagerView: View {
             }
             if !library.loggedIn {
                 Section {
-                    Text("Sign out and back in to see your recipes and schedules on this device.")
+                    Text("Sign in again on Home to see your recipes and schedules on this device.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

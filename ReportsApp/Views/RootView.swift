@@ -53,6 +53,12 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // Here, not on the sign-in screen alone, so a member can sign in
+        // again from inside the app without leaving the page they're on.
+        .sheet(isPresented: $auth.showLoginSheet) {
+            SafariView(url: auth.loginStartURL)
+                .ignoresSafeArea()
+        }
         .onAppear {
             auth.onSignedIn = {
                 Task {
