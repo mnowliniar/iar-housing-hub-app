@@ -63,12 +63,17 @@ struct MarketView: View {
                     .padding(.bottom, 28)
             }
         }
+        // Fill the screen whatever the content's height: attached to the
+        // scroll view alone, the gradient only covered "Loading..." until
+        // the report arrived.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             LinearGradient(
                 colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            .ignoresSafeArea()
         )
         .navigationTitle("Market")
         .navigationBarTitleDisplayMode(.inline)
@@ -618,12 +623,17 @@ struct InsightsView: View {
                 }
             }
         }
+        // Fill the screen whatever the content's height: attached to the
+        // scroll view alone, the gradient only covered "Loading..." until
+        // the report arrived.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             LinearGradient(
                 colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            .ignoresSafeArea()
         )
         .navigationTitle("Insights")
         .navigationBarTitleDisplayMode(.inline)
