@@ -1047,7 +1047,6 @@ private struct SparkFilesSheet: View {
             WebEditor(title: "Slides", subtitle: "Preview, download or edit", icon: "rectangle.stack", path: "\(base)/slides/"),
             WebEditor(title: "Report", subtitle: "Preview, download or edit", icon: "doc.text", path: "\(base)/report/"),
             WebEditor(title: "One-pager", subtitle: "Preview, download or edit", icon: "doc.richtext", path: "\(base)/onepager/"),
-            WebEditor(title: "All files", subtitle: "Everything this chat made", icon: "folder", path: "\(base)/files/"),
         ]
     }
 
