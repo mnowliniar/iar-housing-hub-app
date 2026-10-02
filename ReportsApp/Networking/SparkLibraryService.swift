@@ -139,12 +139,13 @@ enum SparkLibraryService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["next": path])
         let (data, response) = try await URLSession.shared.data(for: request.withAppIdentity())
-        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 {
             throw ServiceError(message: "Sign out and back in to open the web from the app.")
         }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let link = json["url"] as? String, let result = URL(string: link) else {
-            throw ServiceError(message: "The Hub didn't send a link back.")
+            throw ServiceError(message: "The Hub didn't send a link back (\(status)).")
         }
         return result
     }

@@ -875,6 +875,9 @@ private struct SparkFilesSheet: View {
     @State private var webLink: WebLinkItem?
     @State private var openingPath: String?
     @State private var errorMessage: String?
+    /// The web page whose signed-in link failed, offered in Safari instead.
+    @State private var failedWebPath: String?
+    @Environment(\.openURL) private var openURL
 
     private var chartJSONs: [String] {
         chat.messages.compactMap { $0.payloadType == .chart ? $0.chartSpecJSON : nil }
@@ -972,11 +975,6 @@ private struct SparkFilesSheet: View {
                 }
             }
 
-            if let errorMessage {
-                Section {
-                    Text(errorMessage).font(.footnote).foregroundStyle(.red)
-                }
-            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Files")
@@ -999,6 +997,23 @@ private struct SparkFilesSheet: View {
         .sheet(item: $webLink) { item in
             SafariView(url: item.url)
                 .ignoresSafeArea()
+        }
+        // An alert, not a row: the row sat under the pinboard, so a failed
+        // tap looked like a spinner and then nothing.
+        .alert(
+            "Couldn't open that",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil; failedWebPath = nil } }
+            ),
+            presenting: errorMessage
+        ) { _ in
+            if let path = failedWebPath, let url = URL(string: ChatManager.serverBaseURL + path) {
+                Button("Open in Safari") { openURL(url) }
+            }
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
         }
     }
 
@@ -1025,8 +1040,11 @@ private struct SparkFilesSheet: View {
         defer { openingPath = nil }
         do {
             let url = try await chat.webLink(path: path)
+            debugLog("[Files] opening", path)
             webLink = WebLinkItem(url: url)
         } catch {
+            debugLog("[Files] web link failed for", path, error.localizedDescription)
+            failedWebPath = path
             errorMessage = error.localizedDescription
         }
     }
