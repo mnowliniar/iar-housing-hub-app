@@ -19,6 +19,16 @@ struct HomeView: View {
                 set: { if !$0 { app.marketGeoID = nil } })
     }
 
+    @State private var showGeoPicker = false
+    @State private var showSettings = false
+    @State private var dashboardGeo: Geo?
+
+    /// The market the numbers at the top are for.
+    private var dashboardGeoID: String {
+        let id = app.userPrefs.app.dashboardGeoID ?? ""
+        return id.isEmpty ? "18" : id
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -26,35 +36,64 @@ struct HomeView: View {
                     FreshSignInCard()
                 }
 
-                // 1) Dashboard section
+                // The week's numbers as one strip, so the insight under it
+                // is on screen without scrolling.
                 MarketDashboardView(geoID: app.selectedGeoID)
 
-                // 2) The launcher: your reports, your markets, Spark. Below
-                // the dashboard, which stays first.
+                TopInsightCard(geoID: dashboardGeoID)
+                    .padding(.horizontal)
+
+                LocationChip()
+                    .padding(.horizontal)
+
                 HomeLauncherView()
 
-                // 2) Blogs section
                 BlogRail()
-                // 3) Reports section
                 ReportsRail()
-
-                Button("Sign out") {
-                    auth.logout()
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
             }
             .padding(.vertical, 4)
+            .padding(.bottom, 12)
         }
-        .background(
-                LinearGradient(
-                    colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-        )
+        .hubPage()
         .navigationTitle("Home")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Settings")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showGeoPicker = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(dashboardGeo?.displayName ?? "Market")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                }
+                .accessibilityLabel("Change the dashboard market")
+            }
+        }
+        .task(id: dashboardGeoID) {
+            dashboardGeo = await APIService.fetchGeo(geoid: dashboardGeoID)
+        }
+        .sheet(isPresented: $showGeoPicker) {
+            GeoPickerSheet { newGeo in
+                app.selectedGeoID = newGeo
+                app.userPrefs.app.dashboardGeoID = newGeo
+                app.saveUserPrefs()
+                showGeoPicker = false
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet()
+        }
         .background {
             NavigationLink(isActive: $showDeepLinkedInsights) {
                 InsightsView(geoID: Int(app.insightGeoID ?? app.selectedGeoID) ?? 18)
@@ -180,7 +219,7 @@ struct BlogRail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Latest Blogs").font(.headline).padding(.horizontal)
+            HubSectionHeader(title: "Latest blogs").padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     if loading {
@@ -274,7 +313,6 @@ struct BlogCard: View {
             .frame(width: cardWidth, alignment: .topLeading)
             .frame(minHeight: 300, alignment: .topLeading)
             .glassCard(cornerRadius: 12)
-            .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -314,7 +352,7 @@ struct ReportsRail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Latest Reports").font(.headline).padding(.horizontal)
+            HubSectionHeader(title: "Latest reports").padding(.horizontal)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     if loading {
@@ -434,7 +472,6 @@ struct ReportCard: View {
                 .frame(width: cardWidth, alignment: .topLeading)
                 .frame(minHeight: 100, alignment: .topLeading)
                 .glassCard(cornerRadius: 12, tint: BrandColors.teal)
-                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
             }
             .buttonStyle(.plain)
 
@@ -512,45 +549,22 @@ extension Report {
 }
 
 extension View {
-    @ViewBuilder
+    /// The one card: white, a hairline, a soft shadow, like the insight
+    /// card. The glass effect and the tints are gone; the parameters stay
+    /// so call sites didn't have to change.
     func glassCard(
-        cornerRadius: CGFloat = 12,
+        cornerRadius: CGFloat = 16,
         tint: Color = .clear,
         tintOpacity: Double = 0.18,
         strokeOpacity: Double = 0.25
     ) -> some View {
-        if #available(iOS 26.0, *) {
-            self
-                .glassEffect(
-                    .regular,
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                )
-                // Optional tint layer to nudge color toward brand
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(tint.opacity(tintOpacity))
-                )
-                // Subtle edge to match the glass look
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(.white.opacity(strokeOpacity), lineWidth: 1)
-                )
-        } else {
-            // Fallback for iOS < 18
-            self
-                .background(
-                    .regularMaterial,
-                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(tint.opacity(tintOpacity))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(.white.opacity(strokeOpacity), lineWidth: 1)
-                )
-        }
+        self
+            .background(HubStyle.card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(HubStyle.hairline, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -694,5 +708,42 @@ struct FavoriteMarketPickerSheet: View {
             selectedGeo = restoredSelection
             isLoadingGeos = false
         }
+    }
+}
+
+
+/// Account and app details. Sign out lives here now, off the Home page.
+private struct SettingsSheet: View {
+    @EnvironmentObject var auth: AuthManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Account") {
+                    LabeledContent("Signed in as", value: UserDefaults.standard.string(forKey: "chat_user_id") ?? "Member")
+                    Button("Sign out", role: .destructive) {
+                        dismiss()
+                        auth.logout()
+                    }
+                }
+                Section {
+                    LabeledContent("Version", value: appVersion)
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return build.isEmpty ? version : "\(version) (\(build))"
     }
 }

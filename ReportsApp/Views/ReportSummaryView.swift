@@ -20,6 +20,7 @@ struct ReportSummaryView: View {
     @State private var isLoading = true
     @State private var exportItem: ExportURLItem?
     @State private var shareItem: ShareURLItem?
+    @State private var cardShare: InsightShareItem?
     @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
@@ -75,42 +76,9 @@ struct ReportSummaryView: View {
 
                     // Cards
                     ForEach(summary.vizzes) { viz in
-                       Group {
-                               // iPhone / compact: original stacked layout
-                               VStack(alignment: .leading, spacing: 6) {
-                                   // ABOVE CHART (title and big num)
-                                   Text(viz.title).font(.headline).padding(.bottom, 6)
-                                   if let label2 = viz.fact2label, let val2 = viz.fact2 {
-                                       HeroFactRow(label: label2, value: val2, expected: viz.exp2)
-                                   }
-                                   // CHART
-                                   if let chartData = viz.chart_data, let type = viz.type {
-                                       DataChartView(
-                                           chartData: chartData,
-                                           type: type,
-                                           color: .blue,
-                                           title: viz.title,
-                                           format: viz.format ?? "default"
-                                       )
-                                       .onAppear { debugLog("✅ Rendering chart for: \(viz.title) type: \(type)") }
-                                       .padding(.top)
-                                   }
-                                   // BELOW CHART (supporting chips)
-                                   Divider().padding(.vertical, 4)
-                                   VStack(spacing: 8) {
-                                       if let label1 = viz.fact1label, let val1 = viz.fact1 {
-                                           StatChip(label: label1, value: val1, expected: viz.exp1)
-                                       }
-                                       if let label3 = viz.fact3label, let val3 = viz.fact3 {
-                                           StatChip(label: label3, value: val3, expected: viz.exp3)
-                                       }
-                                   }
-                               }
-                       }
-                        .padding()
-                        .glassCard()
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+                        ReportVizCard(viz: viz) {
+                            shareCard(viz)
+                        }
                         .padding(.horizontal, hSize == .regular ? 32 : 16)
                     }
                 }
@@ -128,14 +96,7 @@ struct ReportSummaryView: View {
         // scroll view alone, the gradient only covered "Loading..." until
         // the report arrived.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .hubPage()
         .task {
             debugLog("Loading summary for \(geo.geoid), \(updateDate)")
             await loadSummary()
@@ -158,6 +119,51 @@ struct ReportSummaryView: View {
         }
         .sheet(item: $shareItem) { item in
             ActivityView(activityItems: [item.url])
+        }
+        .sheet(item: $cardShare, onDismiss: {
+            cardShare?.cleanup()
+            cardShare = nil
+        }) { item in
+            ActivityViewController(activityItems: [item.activityItemSource])
+        }
+    }
+
+    /// One chart of the report as an image: the card as drawn, plus the
+    /// report's name and the source, at a width that reads on a phone.
+    @MainActor
+    private func shareCard(_ viz: VizSummary) {
+        let package = viz.chart_data.flatMap {
+            VizNormalizer.makePackage(chartData: $0, type: viz.type ?? "", format: viz.format ?? "default", variant: nil, title: viz.title)
+        }
+        let caption = "\(summary?.title ?? report.title) · \(summary?.geo ?? geo.displayName) · \(summary?.report_date ?? updateDate)"
+        let content = VStack(alignment: .leading, spacing: 10) {
+            ReportVizCard(viz: viz, package: package, fitsWidth: true)
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            Text("Source: Indiana Association of REALTORS®")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+        }
+        .padding(16)
+        .frame(width: 390)
+        .background(Color.white)
+        .preferredColorScheme(.light)
+        .environment(\.dynamicTypeSize, .large)
+
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = UIScreen.main.scale
+        if let image = renderer.uiImage,
+           let item = InsightShareItem.make(image: image, title: "\(viz.title) · \(summary?.geo ?? geo.displayName)") {
+            cardShare = item
+            EventTracker.fire(.exportChart, metadata: [
+                "kind": "report_card",
+                "report_id": String(report.id),
+                "viz_id": String(viz.vizid),
+                "geo_id": String(geo.geoid),
+            ])
         }
     }
 
@@ -234,26 +240,123 @@ struct StatChip: View {
     var tint: Color = BrandColors.teal
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label).font(.caption).lineLimit(1).opacity(0.85)
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(value).font(.footnote.weight(.semibold)).lineLimit(1)
-                if let expected = expected, !expected.isEmpty {
-                    Text(expected)
-                        .font(.caption2)
-                        .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .opacity(0.7)
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value)
+                .font(.headline.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            if let expected, !expected.isEmpty {
+                Text(expected)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12).fill(tint.opacity(0.10)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tint.opacity(0.25), lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(HubStyle.chip, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label) \(value)")
+    }
+}
+
+/// One chart of a report, drawn like an insight card: the main fact as the
+/// hero number, the chart, the other facts in quiet chips, a share button.
+struct ReportVizCard: View {
+    let viz: VizSummary
+    /// A chart package built ahead of time, for the share image.
+    var package: DataPackage? = nil
+    /// Draw the whole series in the width given, instead of a scrolling plot.
+    var fitsWidth: Bool = false
+    var onShare: (() -> Void)? = nil
+
+    private struct Chip: Identifiable {
+        let id: Int
+        let label: String
+        let value: String
+        let expected: String?
+    }
+
+    private var chips: [Chip] {
+        var out: [Chip] = []
+        if let label = viz.fact1label, let value = viz.fact1 {
+            out.append(Chip(id: 1, label: label, value: value, expected: viz.exp1))
+        }
+        if let label = viz.fact3label, let value = viz.fact3 {
+            out.append(Chip(id: 3, label: label, value: value, expected: viz.exp3))
+        }
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(viz.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let onShare {
+                    Button(action: onShare) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(BrandColors.teal)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Share this chart")
+                }
+            }
+
+            if let value = viz.fact2 {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(value)
+                        .font(.system(size: 40, weight: .bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if let expected = viz.exp2, !expected.isEmpty {
+                        Text(expected)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                if let label = viz.fact2label, !label.isEmpty {
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let chartData = viz.chart_data, let type = viz.type {
+                DataChartView(
+                    chartData: chartData,
+                    type: type,
+                    color: .blue,
+                    title: viz.title,
+                    format: viz.format ?? "default",
+                    package: package,
+                    fitsWidth: fitsWidth
+                )
+                .padding(.top, 4)
+            }
+
+            if !chips.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(chips) { chip in
+                        StatChip(label: chip.label, value: chip.value, expected: chip.expected)
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
+        .hubCard()
     }
 }
 
@@ -325,8 +428,22 @@ struct DataChartView: View {
 
     // Series and DataPackage structs removed
 
-    @State private var dataPackage = DataPackage()
-    @State private var isLoading = true
+    @State private var dataPackage: DataPackage
+    @State private var isLoading: Bool
+    /// Draw the whole series in the width given (a share image has no scroll).
+    let fitsWidth: Bool
+
+    init(chartData: [[String: JSONValue]], type: String, color: Color, title: String, format: String,
+         package: DataPackage? = nil, fitsWidth: Bool = false) {
+        self.chartData = chartData
+        self.type = type
+        self.color = color
+        self.title = title
+        self.format = format
+        self.fitsWidth = fitsWidth
+        _dataPackage = State(initialValue: package ?? DataPackage())
+        _isLoading = State(initialValue: package == nil)
+    }
     
     // Helpers
     
@@ -387,7 +504,7 @@ struct DataChartView: View {
         func body(content: Content) -> some View {
             content.chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(); AxisTick()
+                    AxisGridLine().foregroundStyle(HubStyle.grid)
                     if let d = value.as(Double.self) {
                         AxisValueLabel { Text(formatValue(d)) }
                     }
@@ -407,7 +524,7 @@ struct DataChartView: View {
                 } else {
                     let step = max(1, labels.count / 8)
                     let ticks = labels.enumerated().compactMap { $0.offset % step == 0 ? $0.element : nil }
-                    AxisMarks(values: ticks) { AxisGridLine(); AxisTick(); AxisValueLabel().offset(y: 7) }
+                    AxisMarks(values: ticks) { AxisGridLine().foregroundStyle(HubStyle.grid); AxisValueLabel().offset(y: 7) }
                 }
             }
             .chartPlotStyle { plot in
@@ -702,7 +819,7 @@ struct DataChartView: View {
                 let pointCount = dataPackage.dates?.count ?? dataPackage.labels.count
                 let contentWidth = max(CGFloat(pointCount) * 12.0, 360)
 
-                if type == "lineTrend" {
+                if type == "lineTrend" && !fitsWidth {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 0) {
@@ -740,7 +857,7 @@ struct DataChartView: View {
                     .modifier(ColorScale(domain: scale.domain, range: scale.range))
                     .modifier(YAxisFormat(formatValue: formatValue))
                     .modifier(XAxisConfig(dates: dataPackage.dates, labels: dataPackage.labels))
-                    .chartLegend(.visible)
+                    .chartLegend(dataPackage.series.count > 1 ? .visible : .hidden)
                     .chartYScale(domain: yDomain)
                     .frame(height: chartHeight)
                 }

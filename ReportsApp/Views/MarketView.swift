@@ -21,14 +21,14 @@ struct MarketView: View {
     @State private var isLoadingInsights = false
     @State private var insightVizDataByID: [Int: InsightVizData] = [:]
     @State private var shareItem: InsightShareItem?
+    @State private var openedInsight: InsightIndex?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
 
-                Text("Your key indicators")
-                    .font(.headline)
+                HubSectionHeader(title: "Your key indicators")
                     .padding(.horizontal, 16)
 
                 MarketDashboardSection(geoID: String(geoID))
@@ -37,8 +37,9 @@ struct MarketView: View {
                     .padding(.bottom, 8)
 
                 HStack {
-                    Text("Insights")
-                        .font(.headline)
+                    Text("INSIGHTS")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
                     Spacer()
 
@@ -55,8 +56,7 @@ struct MarketView: View {
 
                 insightsSection
 
-                Text("Ask Spark")
-                    .font(.headline)
+                HubSectionHeader(title: "Ask Spark")
                     .padding(.horizontal, 16)
 
                 chatLaunchersSection
@@ -67,14 +67,7 @@ struct MarketView: View {
         // scroll view alone, the gradient only covered "Loading..." until
         // the report arrived.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .hubPage()
         .navigationTitle("Market")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -92,6 +85,13 @@ struct MarketView: View {
                 await loadInsights()
                 await loadInsightVizData()
             }
+        }
+        .fullScreenCover(item: $openedInsight) { item in
+            InsightDetailView(insights: insights,
+                              geoName: activeGeo?.displayName ?? "",
+                              vizData: insightVizDataByID,
+                              startIndex: item.id)
+                .environmentObject(app)
         }
         .sheet(item: $shareItem, onDismiss: {
             shareItem?.cleanup()
@@ -190,13 +190,10 @@ struct MarketView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .background(
-                            .regularMaterial,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
+                        .background(HubStyle.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                                .stroke(HubStyle.hairline, lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
@@ -301,7 +298,6 @@ struct MarketView: View {
         .frame(width: 320, alignment: .topLeading)
         .frame(minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     private func insightCard(_ insight: InsightPreviewItem) -> some View {
@@ -325,122 +321,16 @@ struct MarketView: View {
         .frame(width: 320, alignment: .topLeading)
         .frame(minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openedInsight = InsightIndex(id: insights.firstIndex(where: { $0.id == insight.id }) ?? 0)
+        }
     }
 
-    @ViewBuilder
     private func insightCardBody(_ insight: InsightPreviewItem) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("\((insight.title ?? insight.viz ?? "Insight")) • \((activeGeo?.displayName ?? ""))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .padding(.trailing, 28)
-
-            Text(capitalizedInsightHeadline(insight))
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.primary)
-                .lineSpacing(2)
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let instanceID = insight.sourceID,
-               let vizData = insightVizDataByID[instanceID] {
-                if insight.type == "weekly_record" || insight.type == "monthly_record" {
-                    RecordInsightChartView(
-                        points: RecordInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_crossing" || insight.type == "monthly_crossing" {
-                    CrossingInsightChartView(
-                        points: CrossingInsightChartParser.parse(vizData.chartData),
-                        isMonthly: insight.type == "monthly_crossing",
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_yoy_momentum" {
-                    YoYMomentumInsightChartView(
-                        points: YoYMomentumInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_geo_vs_state",
-                          let geoPct = vizData.geoPct,
-                          let statePct = vizData.statePct {
-                    GeoVsStateInsightChartView(
-                        geoPct: geoPct,
-                        statePct: statePct,
-                        geoLabel: insight.geo ?? "This market"
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_streak" {
-                    WeeklyStreakInsightChartView(
-                        points: WeeklyStreakInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_elbow" {
-                    WeeklyElbowInsightChartView(
-                        points: WeeklyElbowInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_recent3_yoy" {
-                    WeeklyRecent3YoYInsightChartView(
-                        points: WeeklyRecent3YoYInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_trend_yoy" {
-                    WeeklyTrendYoYInsightChartView(
-                        points: WeeklyTrendYoYInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "weekly_wow" {
-                    WeeklyWowInsightChartView(
-                        points: WeeklyWowInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "price_breakout_yoy" {
-                    PriceBreakoutInsightChartView(
-                        points: PriceBreakoutInsightChartParser.parse(vizData.chartData, bucket: vizData.bucket),
-                        reportDate: insight.reportDate,
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else if insight.type == "monthly_yoy" {
-                    MonthlyYoYInsightChartView(
-                        points: MonthlyYoYInsightChartParser.parse(vizData.chartData),
-                        format: vizData.format,
-                        unit: vizData.unit
-                    )
-                    .frame(height: 220)
-                } else {
-                    webChartOrPlaceholder(insight)
-                        .frame(height: 220)
-                }
-
-            } else {
-                fallbackChart(insight)
-                    .frame(height: 220)
-            }
-
-            Text("Source: Indiana Association of REALTORS®")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
+        InsightCardBody(insight: insight,
+                        geoName: activeGeo?.displayName ?? "",
+                        vizData: insight.sourceID.flatMap { insightVizDataByID[$0] })
     }
 
     @ViewBuilder
@@ -584,6 +474,7 @@ struct InsightsView: View {
     @State private var isLoadingInsights = false
     @State private var insightVizDataByID: [Int: InsightVizData] = [:]
     @State private var shareItem: InsightShareItem?
+    @State private var openedInsight: InsightIndex?
 
     var body: some View {
         ScrollView {
@@ -627,20 +518,20 @@ struct InsightsView: View {
         // scroll view alone, the gradient only covered "Loading..." until
         // the report arrived.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .hubPage()
         .navigationTitle("Insights")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadCurrentGeo()
             await loadInsights()
             await loadInsightVizData()
+        }
+        .fullScreenCover(item: $openedInsight) { item in
+            InsightDetailView(insights: insights,
+                              geoName: activeGeo?.displayName ?? "",
+                              vizData: insightVizDataByID,
+                              startIndex: item.id)
+                .environmentObject(app)
         }
         .sheet(item: $shareItem, onDismiss: {
             shareItem?.cleanup()
@@ -695,7 +586,6 @@ struct InsightsView: View {
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     private func insightCard(_ insight: InsightPreviewItem) -> some View {
@@ -716,7 +606,10 @@ struct InsightsView: View {
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .topLeading)
         .glassCard(cornerRadius: 12, tint: .clear)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openedInsight = InsightIndex(id: insights.firstIndex(where: { $0.id == insight.id }) ?? 0)
+        }
     }
 
     @ViewBuilder
@@ -961,7 +854,7 @@ struct InsightsView: View {
     }
 }
 
-private struct InsightShareItem: Identifiable {
+struct InsightShareItem: Identifiable {
     let id = UUID()
     let image: UIImage
     let fileURL: URL
@@ -995,7 +888,7 @@ private struct InsightShareItem: Identifiable {
     }
 }
 
-private final class ShareImageItemSource: NSObject, UIActivityItemSource {
+final class ShareImageItemSource: NSObject, UIActivityItemSource {
     let fileURL: URL
     let image: UIImage
     let title: String
@@ -1026,7 +919,7 @@ private final class ShareImageItemSource: NSObject, UIActivityItemSource {
     }
 }
 
-private struct ActivityViewController: UIViewControllerRepresentable {
+struct ActivityViewController: UIViewControllerRepresentable {
     let activityItems: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {

@@ -338,7 +338,6 @@ struct TileCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()
         .glassCard(cornerRadius: 12)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 
     private func formattedValue(_ value: Double) -> String {
@@ -365,36 +364,35 @@ struct TileCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: 4)
-                .fill(.white.opacity(0.35))
+                .fill(Color(.systemGray5))
                 .frame(width: 120, height: 18)
 
             RoundedRectangle(cornerRadius: 4)
-                .fill(.white.opacity(0.22))
+                .fill(Color(.systemGray5))
                 .frame(width: 80, height: 12)
 
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(.white.opacity(0.28))
+                    .fill(Color(.systemGray5))
                     .frame(width: 90, height: 34)
 
                 VStack(alignment: .leading, spacing: 4) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(.white.opacity(0.22))
+                        .fill(Color(.systemGray5))
                         .frame(width: 44, height: 12)
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(.white.opacity(0.18))
+                        .fill(Color(.systemGray5))
                         .frame(width: 70, height: 10)
                 }
             }
 
             RoundedRectangle(cornerRadius: 6)
-                .fill(.white.opacity(0.16))
+                .fill(Color(.systemGray5))
                 .frame(height: 44)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .glassCard(cornerRadius: 12)
-        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 }
 
@@ -404,7 +402,6 @@ struct MarketDashboardView: View {
     @State private var showGeoPicker = false
     @State private var showVizPicker = false
     @State private var activeGeo: Geo?
-    @State private var isLoadingGeo = false
     private var selectedVizIDs: [Int] {
         let ids = app.userPrefs.app.dashboardVizIDs
         return ids.isEmpty ? [9, 3, 7] : ids
@@ -415,73 +412,57 @@ struct MarketDashboardView: View {
     }
     @State private var tiles: [Tile] = []
     @State private var isLoading = true
-    @State private var showLoadedTiles = false
-    @State private var showSkeletonTiles = true
     let geoID: String
     var vizIDs: [Int] { selectedVizIDs }
 
     var body: some View {
-        ScrollView {
-            Group {
-                if hSize == .compact {
-                    let skeletonCount = min(3, vizIDs.count)
-
-                    ZStack(alignment: .topLeading) {
-                        LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
-                            ForEach(0..<skeletonCount, id: \.self) { _ in
-                                TileCardSkeleton()
-                                    .frame(height: 169)
-                            }
+        VStack(spacing: 8) {
+            if hSize == .compact {
+                // A strip, not three stacked cards: the week's numbers in one
+                // row, so what's under them is on screen without scrolling.
+                HStack(alignment: .top, spacing: 10) {
+                    if isLoading && tiles.isEmpty {
+                        ForEach(0..<min(3, vizIDs.count), id: \.self) { _ in
+                            MetricTileSkeleton()
                         }
-                        .opacity(showSkeletonTiles ? 1 : 0)
-
-                        LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
-                            ForEach(tiles) { tile in
-                                TileCard(tile: tile)
-                                    .opacity(showLoadedTiles ? 1 : 0)
-                            }
+                    } else {
+                        ForEach(tiles) { tile in
+                            MetricTile(tile: tile)
                         }
                     }
-                    .padding()
-                } else {
-                    ZStack(alignment: .topLeading) {
-                        if showSkeletonTiles {
-                            dashboardWideSkeletonLayout
-                                .opacity(showSkeletonTiles ? 1 : 0)
-                        }
-
-                        if showLoadedTiles {
-                            dashboardWideLoadedLayout
-                                .opacity(showLoadedTiles ? 1 : 0)
-                        }
-                    }
-                    .padding()
                 }
-            }
-            VStack(spacing: 4) {
-                Text(activeGeo?.displayName ?? "Dashboard")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    Button("Pick Market") { showGeoPicker = true }
-                        .font(.caption)
-                    Text("•")
+                HStack {
+                    Text(tiles.first?.latestReportDate ?? " ")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Pick Metrics") { showVizPicker = true }
-                        .font(.caption)
+                    Spacer()
+                    Button("Edit metrics") { showVizPicker = true }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(BrandColors.teal)
                 }
+                .padding(.horizontal, 2)
+            } else {
+                ZStack(alignment: .topLeading) {
+                    if isLoading && tiles.isEmpty {
+                        dashboardWideSkeletonLayout
+                    } else {
+                        dashboardWideLoadedLayout
+                    }
+                }
+                HStack(spacing: 12) {
+                    Text(activeGeo?.displayName ?? " ")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Pick market") { showGeoPicker = true }
+                        .font(.caption.weight(.semibold))
+                    Button("Edit metrics") { showVizPicker = true }
+                        .font(.caption.weight(.semibold))
+                }
+                .padding(.horizontal, 2)
             }
-            .padding(.horizontal)
-            .padding(.bottom)
         }
-        .background(
-                LinearGradient(
-                    colors: [BrandColors.teal.opacity(0.1), BrandColors.purple.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-        )
+        .padding(.horizontal)
         .task {
             await loadCurrentGeo()
             await reloadTiles()
@@ -521,8 +502,8 @@ struct MarketDashboardView: View {
                 }
             ))
         }
-        .navigationTitle("Dashboard")
     }
+
     /// Fetches the three tiles for the current dashboard market and metrics.
     /// A reply that arrives after the market or metrics changed again is
     /// dropped, so a slow earlier request can't overwrite a newer one.
@@ -530,8 +511,6 @@ struct MarketDashboardView: View {
         let geo = selectedGeoID
         let ids = vizIDs
         isLoading = true
-        showSkeletonTiles = true
-        showLoadedTiles = false
         var fetched: [Tile] = []
         do {
             fetched = Array(try await DashboardService().fetchTiles(geoID: geo, vizIDs: ids).prefix(3))
@@ -539,11 +518,9 @@ struct MarketDashboardView: View {
             debugLog("Dashboard load error:", error)
         }
         guard geo == selectedGeoID, ids == vizIDs else { return }
-        tiles = fetched
-        isLoading = false
-        withAnimation(.easeInOut(duration: 0.25)) {
-            showLoadedTiles = true
-            showSkeletonTiles = false
+        withAnimation(.easeInOut(duration: 0.2)) {
+            tiles = fetched
+            isLoading = false
         }
     }
 
@@ -553,12 +530,7 @@ struct MarketDashboardView: View {
             activeGeo = nil
             return
         }
-
-        isLoadingGeo = true
-        defer { isLoadingGeo = false }
-        debugLog("[Dashboard] loadCurrentGeo selectedGeoID:", trimmedID)
         activeGeo = await APIService.fetchGeo(geoid: trimmedID)
-        debugLog("[Dashboard] activeGeo displayName:", activeGeo?.displayName)
     }
 
     private var dashboardWideSkeletonLayout: some View {
@@ -615,6 +587,95 @@ struct MarketDashboardView: View {
                 }
             }
         }
+    }
+}
+
+/// A tile's value in its own format: dollars, percent, or a plain count.
+func formatTileValue(_ value: Double, format: String?) -> String {
+    switch format {
+    case "$":
+        return "$" + Int(value.rounded()).formatted()
+    case "%":
+        return value.rounded() == value ? "\(Int(value))%" : String(format: "%.1f%%", value)
+    default:
+        return value.rounded() == value ? Int(value).formatted() : String(format: "%.1f", value)
+    }
+}
+
+/// One metric in the strip: the name, the number, the change since the
+/// period before, and a short line of the last twelve.
+struct MetricTile: View {
+    let tile: Tile
+
+    private var deltaText: String? {
+        let series = tile.series
+        guard series.count >= 2 else { return nil }
+        let last = series[series.count - 1]
+        let previous = series[series.count - 2]
+        guard previous != 0 else { return nil }
+        let percent = Int(((last - previous) / abs(previous) * 100).rounded())
+        let unit = (tile.vizTimespan ?? "").lowercased().hasPrefix("month") ? "mo" : "wk"
+        if percent == 0 { return "flat \(unit)" }
+        return (percent > 0 ? "+" : "−") + "\(abs(percent))% \(unit)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(tile.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            if let value = tile.latestValue {
+                Text(formatTileValue(value, format: tile.vizFormat))
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Text(deltaText ?? " ")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            MiniSparkline(values: tile.series)
+                .frame(height: 22)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .hubCard(padding: 12, cornerRadius: 14)
+    }
+}
+
+struct MetricTileSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(width: 60, height: 10)
+            RoundedRectangle(cornerRadius: 4).fill(Color(.systemGray4)).frame(width: 70, height: 20)
+            RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(width: 40, height: 9)
+            RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray6)).frame(height: 22).padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .hubCard(padding: 12, cornerRadius: 14)
+    }
+}
+
+/// A line and nothing else. The tile is too small to scrub.
+struct MiniSparkline: View {
+    let values: [Double]
+
+    var body: some View {
+        let minV = values.min() ?? 0
+        let maxV = values.max() ?? 1
+        let span = max(maxV - minV, max(abs(maxV), abs(minV)) * 0.05)
+        let pad = span * 0.12
+        return Chart(Array(values.enumerated()), id: \.offset) { item in
+            LineMark(x: .value("t", item.offset), y: .value("v", item.element))
+                .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                .foregroundStyle(BrandColors.teal)
+        }
+        .chartYScale(domain: (minV - pad)...(maxV + pad))
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
     }
 }
 

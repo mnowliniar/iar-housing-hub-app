@@ -15,5 +15,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location finds the ZIP code you're in, so Home can show that market's insights.</string>
 </dict>
 </plist>
