@@ -40,8 +40,7 @@ struct HomeView: View {
                 // is on screen without scrolling.
                 MarketDashboardView(geoID: app.selectedGeoID)
 
-                TopInsightCard(geoID: dashboardGeoID)
-                    .padding(.horizontal)
+                InsightRail(geoID: dashboardGeoID)
 
                 LocationChip()
                     .padding(.horizontal)

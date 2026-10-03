@@ -258,7 +258,7 @@ struct StatChip: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(HubStyle.chip, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -348,11 +348,15 @@ struct ReportVizCard: View {
             }
 
             if !chips.isEmpty {
+                // Equal heights: each chip is willing to stretch, and the row
+                // sizes itself to the taller one rather than to the screen.
                 HStack(spacing: 10) {
                     ForEach(chips) { chip in
                         StatChip(label: chip.label, value: chip.value, expected: chip.expected)
+                            .frame(maxHeight: .infinity)
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 2)
             }
         }

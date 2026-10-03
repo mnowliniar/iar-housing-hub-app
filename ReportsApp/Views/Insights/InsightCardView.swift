@@ -320,11 +320,11 @@ struct InsightDetailView: View {
     }
 }
 
-// MARK: - Home's top insight
+// MARK: - Home's insights
 
-/// The market's strongest insight this week, on Home under the numbers.
-/// Tap to open it big; the share button sends the card as an image.
-struct TopInsightCard: View {
+/// The market's insights this week as a row of cards on Home, under the
+/// numbers. Tap one to open it big; the share button sends it as an image.
+struct InsightRail: View {
     let geoID: String
     @State private var insights: [InsightPreviewItem] = []
     @State private var vizData: [Int: InsightVizData] = [:]
@@ -332,18 +332,43 @@ struct TopInsightCard: View {
     @State private var opened: InsightIndex?
     @State private var shareItem: InsightShareItem?
 
+    private let cardWidth: CGFloat = 320
+
     var body: some View {
-        Group {
-            if loading && insights.isEmpty {
-                InsightCardSkeleton()
-                    .hubCard(padding: 18)
-            } else if let first = insights.first {
-                card(first)
+        VStack(alignment: .leading, spacing: 8) {
+            HubSectionHeader(title: "Insights") {
+                NavigationLink("View all") {
+                    InsightsView(geoID: Int(geoID) ?? 18)
+                }
             }
+            .padding(.horizontal)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                // Same height for every card in the row: each is willing to
+                // stretch, and the row sizes itself to the tallest.
+                HStack(alignment: .top, spacing: 12) {
+                    if loading && insights.isEmpty {
+                        ForEach(0..<2, id: \.self) { _ in
+                            InsightCardSkeleton()
+                                .frame(width: cardWidth - 36, alignment: .topLeading)
+                                .hubCard(padding: 18)
+                        }
+                    } else {
+                        ForEach(Array(insights.enumerated()), id: \.element.id) { index, insight in
+                            card(insight, index: index)
+                                .frame(maxHeight: .infinity)
+                        }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+            }
+            .scrollClipDisabled()
         }
         .task(id: geoID) { await load() }
         .fullScreenCover(item: $opened) { item in
-            InsightDetailView(insights: insights, geoName: first?.geo ?? "", vizData: vizData, startIndex: item.id)
+            InsightDetailView(insights: insights, geoName: insights.first?.geo ?? "", vizData: vizData, startIndex: item.id)
         }
         .sheet(item: $shareItem, onDismiss: {
             shareItem?.cleanup()
@@ -353,20 +378,13 @@ struct TopInsightCard: View {
         }
     }
 
-    private var first: InsightPreviewItem? { insights.first }
-
-    private func card(_ insight: InsightPreviewItem) -> some View {
+    private func card(_ insight: InsightPreviewItem, index: Int) -> some View {
         ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 10) {
-                InsightCardBody(insight: insight,
-                                geoName: insight.geo ?? "",
-                                vizData: insight.sourceID.flatMap { vizData[$0] })
-                if insights.count > 1 {
-                    Text("1 of \(insights.count) · tap to see them all")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(BrandColors.teal)
-                }
-            }
+            InsightCardBody(insight: insight,
+                            geoName: insight.geo ?? "",
+                            vizData: insight.sourceID.flatMap { vizData[$0] })
+                .frame(width: cardWidth - 36, alignment: .topLeading)
+                .frame(maxHeight: .infinity, alignment: .top)
             Button {
                 share(insight)
             } label: {
@@ -380,7 +398,7 @@ struct TopInsightCard: View {
         }
         .hubCard(padding: 18)
         .contentShape(Rectangle())
-        .onTapGesture { opened = InsightIndex(id: 0) }
+        .onTapGesture { opened = InsightIndex(id: index) }
     }
 
     private func load() async {
