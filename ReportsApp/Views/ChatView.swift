@@ -1392,11 +1392,23 @@ private struct RichChatText: View {
                         }
                     }
 
+                case .heading(let level):
+                    InlineMarkdownText(
+                        plainText: block.plainText,
+                        attributedText: block.attributedText,
+                        foregroundStyle: foregroundStyle
+                    )
+                    .font(level <= 2 ? .title3.weight(.bold) : (level == 3 ? .headline : .subheadline.weight(.semibold)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 6)
+
                 case .bullet:
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top, spacing: 8) {
-                            Text("•")
+                            Text(block.marker ?? "•")
                                 .foregroundStyle(foregroundStyle)
+                                .monospacedDigit()
+                                .frame(minWidth: block.marker == nil || block.marker == "•" ? 0 : 22, alignment: .trailing)
                             InlineMarkdownText(
                                 plainText: block.plainText,
                                 attributedText: block.attributedText,
@@ -1404,6 +1416,7 @@ private struct RichChatText: View {
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(.leading, CGFloat(block.indent) * 18)
 
                         if let relatedLinks = block.relatedLinks, !relatedLinks.isEmpty {
                             RelatedLinksView(links: relatedLinks)
@@ -1954,7 +1967,16 @@ private struct RelatedLinkCard: View {
 private struct ChatTableView: View {
     let table: ChatTableData
 
-    private let cellWidth: CGFloat = 120
+    /// Wide enough for the longest cell, within reason.
+    private var cellWidth: CGFloat {
+        let longest = (table.headers + table.rows.flatMap { $0 }).map(\.count).max() ?? 8
+        return min(200, max(84, CGFloat(longest) * 7.5))
+    }
+
+    private func cell(_ text: String) -> Text {
+        if let attributed = InlineMarkdown.attributed(text) { return Text(attributed) }
+        return Text(text)
+    }
 
     private var columnCount: Int {
         max(
@@ -2016,7 +2038,7 @@ private struct ChatTableView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 0) {
                         ForEach(0..<columnCount, id: \.self) { index in
-                            Text(headerText(at: index))
+                            cell(headerText(at: index))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .frame(width: cellWidth, alignment: .leading)
@@ -2029,7 +2051,7 @@ private struct ChatTableView: View {
                     ForEach(Array(table.rows.enumerated()), id: \.offset) { rowIndex, row in
                         HStack(spacing: 0) {
                             ForEach(0..<columnCount, id: \.self) { index in
-                                Text(cellText(in: row, at: index))
+                                cell(cellText(in: row, at: index))
                                     .font(.caption)
                                     .foregroundStyle(.primary)
                                     .frame(width: cellWidth, alignment: .leading)

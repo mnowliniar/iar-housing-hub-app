@@ -26,10 +26,27 @@ enum ChatPayloadType: String, Codable {
 
 enum ChatDisplayBlockKind: Equatable {
     case paragraph
+    /// `#` through `######`; the level sets the size.
+    case heading(Int)
     case bullet
     case table
     case contentCard
     case sparkCard
+}
+
+/// Bold, italic, links and code inside one line, the way the web's
+/// renderer does; block structure is the parser's job.
+enum InlineMarkdown {
+    static func attributed(_ text: String) -> AttributedString? {
+        try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(
+                allowsExtendedAttributes: false, interpretedSyntax: .inlineOnlyPreservingWhitespace,
+                failurePolicy: .returnPartiallyParsedIfPossible,
+                languageCode: nil
+            )
+        )
+    }
 }
 
 /// A card for a fenced block Spark sends besides charts, sources and
@@ -165,6 +182,10 @@ struct ChatDisplayBlock: Identifiable, Equatable {
     let relatedLinks: [ChatRelatedLink]?
     let contentCardData: ContentCardData?
     let sparkCard: SparkCard?
+    /// "•" or "3." for a list item.
+    let marker: String?
+    /// Nesting depth of a list item, 0 for the top level.
+    let indent: Int
 
     init(
         kind: ChatDisplayBlockKind,
@@ -173,7 +194,9 @@ struct ChatDisplayBlock: Identifiable, Equatable {
         tableData: ChatTableData?,
         relatedLinks: [ChatRelatedLink]?,
         contentCardData: ContentCardData? = nil,
-        sparkCard: SparkCard? = nil
+        sparkCard: SparkCard? = nil,
+        marker: String? = nil,
+        indent: Int = 0
     ) {
         self.kind = kind
         self.plainText = plainText
@@ -182,6 +205,8 @@ struct ChatDisplayBlock: Identifiable, Equatable {
         self.relatedLinks = relatedLinks
         self.contentCardData = contentCardData
         self.sparkCard = sparkCard
+        self.marker = marker
+        self.indent = indent
     }
 }
 

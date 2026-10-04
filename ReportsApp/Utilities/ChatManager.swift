@@ -1492,9 +1492,52 @@ final class ChatManager: ObservableObject {
 
         let lines = expandedText.components(separatedBy: "\n")
 
+        // What the web's renderer (marked) understands, read line by line:
+        // headings, bullets with any marker, numbered lists, tables with any
+        // separator row, rules and quotes.
+        func tableCells(_ line: String) -> [String] {
+            var t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("|") { t.removeFirst() }
+            if t.hasSuffix("|") { t.removeLast() }
+            return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+        }
         func isTableSeparator(_ line: String) -> Bool {
-            let trimmed = line.replacingOccurrences(of: " ", with: "")
-            return trimmed.contains("|-")
+            guard line.contains("-") else { return false }
+            let cells = tableCells(line)
+            guard !cells.isEmpty else { return false }
+            return cells.allSatisfy { cell in
+                let c = cell.replacingOccurrences(of: " ", with: "")
+                return c.contains("-") && c.allSatisfy { $0 == "-" || $0 == ":" }
+            }
+        }
+        func headingLevel(_ line: String) -> Int? {
+            let level = line.prefix(while: { $0 == "#" }).count
+            guard (1...6).contains(level) else { return nil }
+            let rest = line.dropFirst(level)
+            return rest.isEmpty || rest.hasPrefix(" ") ? level : nil
+        }
+        func listItem(_ rawLine: String) -> (marker: String, text: String, indent: Int)? {
+            let indent = rawLine.prefix(while: { $0 == " " || $0 == "\t" }).count
+            let t = rawLine.trimmingCharacters(in: .whitespaces)
+            for prefix in ["- ", "* ", "+ ", "• ", "– "] where t.hasPrefix(prefix) {
+                return ("•", String(t.dropFirst(prefix.count)), indent)
+            }
+            let digits = t.prefix(while: { $0.isNumber })
+            if (1...3).contains(digits.count) {
+                let after = t.dropFirst(digits.count)
+                if after.hasPrefix(". ") || after.hasPrefix(") ") {
+                    return (String(digits) + ".", String(after.dropFirst(2)), indent)
+                }
+            }
+            return nil
+        }
+        func isRule(_ line: String) -> Bool {
+            let c = line.replacingOccurrences(of: " ", with: "")
+            guard c.count >= 3 else { return false }
+            return c.allSatisfy { $0 == "-" } || c.allSatisfy { $0 == "*" } || c.allSatisfy { $0 == "_" }
+        }
+        func links(in text: String) -> [ChatRelatedLink] {
+            extractMarkdownLinks(from: text).map { ChatRelatedLink(title: $0.title, urlString: $0.href) }
         }
 
         var result: [ChatDisplayBlock] = []
@@ -1508,19 +1551,13 @@ final class ChatManager: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !paragraph.isEmpty {
-                let relatedLinks = extractMarkdownLinks(from: paragraph).map {
-                    ChatRelatedLink(
-                        title: $0.title,
-                        urlString: $0.href
-                    )
-                }
                 result.append(
                     ChatDisplayBlock(
                         kind: .paragraph,
                         plainText: paragraph,
                         attributedText: makeInlineMarkdown(paragraph, enabled: enableInlineMarkdown),
                         tableData: nil,
-                        relatedLinks: relatedLinks
+                        relatedLinks: links(in: paragraph)
                     )
                 )
             }
@@ -1530,10 +1567,32 @@ final class ChatManager: ObservableObject {
         var index = 0
         while index < lines.count {
             let rawLine = lines[index]
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
 
-            if line.isEmpty {
+            if line.isEmpty || isRule(line) {
                 flushParagraph()
+                index += 1
+                continue
+            }
+
+            // A quote keeps its words and loses the mark.
+            if line.hasPrefix("> ") { line = String(line.dropFirst(2)) }
+            else if line == ">" { index += 1; continue }
+
+            if let level = headingLevel(line) {
+                flushParagraph()
+                let text = line.dropFirst(level).trimmingCharacters(in: CharacterSet(charactersIn: " #"))
+                if !text.isEmpty {
+                    result.append(
+                        ChatDisplayBlock(
+                            kind: .heading(level),
+                            plainText: text,
+                            attributedText: makeInlineMarkdown(text, enabled: enableInlineMarkdown),
+                            tableData: nil,
+                            relatedLinks: links(in: text)
+                        )
+                    )
+                }
                 index += 1
                 continue
             }
@@ -1541,10 +1600,7 @@ final class ChatManager: ObservableObject {
             if line.contains("|"), index + 1 < lines.count, isTableSeparator(lines[index + 1]) {
                 flushParagraph()
 
-                let headers = rawLine
-                    .split(separator: "|", omittingEmptySubsequences: true)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-
+                let headers = tableCells(line)
                 var rows: [[String]] = []
                 var rowIndex = index + 2
 
@@ -1553,18 +1609,14 @@ final class ChatManager: ObservableObject {
                     if rowLine.isEmpty || !rowLine.contains("|") {
                         break
                     }
-
-                    let cells = lines[rowIndex]
-                        .split(separator: "|", omittingEmptySubsequences: true)
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-
-                    if !cells.isEmpty {
+                    let cells = tableCells(rowLine)
+                    if cells.contains(where: { !$0.isEmpty }) {
                         rows.append(cells)
                     }
                     rowIndex += 1
                 }
 
-                if !headers.isEmpty {
+                if headers.contains(where: { !$0.isEmpty }) {
                     result.append(
                         ChatDisplayBlock(
                             kind: .table,
@@ -1580,27 +1632,25 @@ final class ChatManager: ObservableObject {
                 continue
             }
 
-            if line.hasPrefix("- ") {
+            if let item = listItem(rawLine) {
                 flushParagraph()
-                let bulletText = String(line.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let bulletText = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 result.append(
                     ChatDisplayBlock(
                         kind: .bullet,
                         plainText: bulletText,
                         attributedText: makeInlineMarkdown(bulletText, enabled: enableInlineMarkdown),
                         tableData: nil,
-                        relatedLinks: extractMarkdownLinks(from: bulletText).map {
-                            ChatRelatedLink(
-                                title: $0.title,
-                                urlString: $0.href
-                            )
-                        }
+                        relatedLinks: links(in: bulletText),
+                        marker: item.marker,
+                        indent: item.indent >= 2 ? 1 : 0
                     )
                 )
-            } else {
-                paragraphBuffer.append(rawLine)
+                index += 1
+                continue
             }
 
+            paragraphBuffer.append(line)
             index += 1
         }
 
@@ -1625,7 +1675,7 @@ final class ChatManager: ObservableObject {
         }
 
         if !relatedSourceLinks.isEmpty {
-            if let lastParagraphIndex = result.lastIndex(where: { $0.kind == .paragraph || $0.kind == .bullet }) {
+            if let lastParagraphIndex = result.lastIndex(where: { $0.kind == .paragraph || $0.kind == .bullet || $0.kind == .heading(1) || $0.kind == .heading(2) || $0.kind == .heading(3) }) {
                 let block = result[lastParagraphIndex]
                 result[lastParagraphIndex] = ChatDisplayBlock(
                     kind: block.kind,
@@ -1674,14 +1724,7 @@ final class ChatManager: ObservableObject {
 
     private func makeInlineMarkdown(_ text: String, enabled: Bool) -> AttributedString? {
         guard enabled else { return nil }
-        return try? AttributedString(
-            markdown: text,
-            options: AttributedString.MarkdownParsingOptions(
-                allowsExtendedAttributes: false, interpretedSyntax: .inlineOnlyPreservingWhitespace,
-                failurePolicy: .returnPartiallyParsedIfPossible,
-                languageCode: nil
-            )
-        )
+        return InlineMarkdown.attributed(text)
     }
     private func describeDecodingError(_ error: DecodingError) -> String {
         switch error {
