@@ -28,6 +28,7 @@ enum EventTracker {
         case downloadInsightChart = "download_insight_chart"  // insight card shared
         case favoriteMarkets = "favorite_markets"
         case favoriteReports = "favorite_reports"
+        case viewMarketPack = "view_market_pack"  // the native pack screen, per market
     }
 
     /// De-dup within a session so a TabView re-selecting a tab doesn't count

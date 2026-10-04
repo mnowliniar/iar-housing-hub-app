@@ -405,13 +405,7 @@ private struct HeatPill: View {
 /// picks the member's own markets.
 struct MarketPackCard: View {
     @EnvironmentObject var app: AppState
-    @State private var webLink: HomeWebLinkItem?
-    @State private var opening = false
-
-    private var packPath: String {
-        let id = app.userPrefs.app.dashboardGeoID ?? ""
-        return (id.isEmpty || id == "18") ? "/market-pack/" : "/market-pack/\(id)/"
-    }
+    @EnvironmentObject var auth: AuthManager
 
     private var monthName: String {
         let formatter = DateFormatter()
@@ -420,8 +414,10 @@ struct MarketPackCard: View {
     }
 
     var body: some View {
-        Button {
-            Task { await open() }
+        NavigationLink {
+            MarketPackView()
+                .environmentObject(app)
+                .environmentObject(auth)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "square.grid.2x2.fill")
@@ -438,32 +434,13 @@ struct MarketPackCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if opening {
-                    ProgressView()
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .hubCard(padding: 12)
         }
         .buttonStyle(.plain)
-        .sheet(item: $webLink) { item in
-            SafariView(url: item.url)
-                .ignoresSafeArea()
-        }
-    }
-
-    private func open() async {
-        opening = true
-        defer { opening = false }
-        let signedIn = try? await SparkLibraryService.webLink(path: packPath)
-        if let signedIn {
-            webLink = HomeWebLinkItem(url: signedIn)
-        } else if let plain = URL(string: ChatManager.serverBaseURL + packPath) {
-            webLink = HomeWebLinkItem(url: plain)
-        }
     }
 }
 
