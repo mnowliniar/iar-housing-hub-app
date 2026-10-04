@@ -86,36 +86,33 @@ struct Tile: Identifiable {
     let points: [SparkPoint]
 }
 
-// 2) Fetch (ETag optional but shown)
+// 2) Fetch. Replies live in HubCache: the tiles a member saw last time
+// come back at once, and the Hub is asked only when the week's data moved.
 final class DashboardService {
-    private var etagForURL: [String:String] = [:]
-
-    func fetchTiles(geoID: String,
-                    vizIDs: [Int],
-                    proptype: String = "all",
-                    facts: [String] = ["fact1","fact2","fact3"]) async throws -> [Tile] {
-
-        let url = URL(string:
+    static func url(geoID: String, vizIDs: [Int], proptype: String = "all",
+                    facts: [String] = ["fact1","fact2","fact3"]) -> URL {
+        URL(string:
           "https://data.indianarealtors.com/api/viz_set/proptype/\(proptype)" +
           "?geo_ids=\(geoID)" +
           "&viz_ids=\(vizIDs.map(String.init).joined(separator: ","))" +
           "&facts=\(facts.joined(separator: ","))" +
           "&fmt=nested&compose=0&window=12&order=asc"
         )!
-        debugLog("url: \(url)")
-        var req = URLRequest(url: url)
-        if let tag = etagForURL[url.absoluteString] {
-            req.addValue(tag, forHTTPHeaderField: "If-None-Match")
+    }
+
+    func fetchTiles(geoID: String, vizIDs: [Int]) async throws -> [Tile] {
+        guard let data = await HubCache.data(Self.url(geoID: geoID, vizIDs: vizIDs), family: .data) else {
+            throw URLError(.cannotLoadFromNetwork)
         }
+        return try Self.tiles(from: data)
+    }
 
-        let (data, resp) = try await URLSession.shared.data(for: req.withAppIdentity())
-#if DEBUG
-        debugLog("DashboardService status:", (resp as? HTTPURLResponse)?.statusCode ?? -1)
-        if let s = String(data: data, encoding: .utf8) { debugLog("DashboardService payload prefix:", s.prefix(200)) }
-#endif
-        if let http = resp as? HTTPURLResponse,
-           let et = http.value(forHTTPHeaderField: "ETag") { etagForURL[url.absoluteString] = et }
+    /// Cached tiles first, then this week's when the data moved.
+    static func tiles(geoID: String, vizIDs: [Int]) -> AsyncStream<[Tile]> {
+        HubCache.stream(url(geoID: geoID, vizIDs: vizIDs), family: .data) { try tiles(from: $0) }
+    }
 
+    static func tiles(from data: Data) throws -> [Tile] {
         let decoded = try JSONDecoder().decode(DashboardResponse.self, from: data)
         guard let geo = decoded.results.first else { return [] }
 
@@ -511,15 +508,18 @@ struct MarketDashboardView: View {
         let geo = selectedGeoID
         let ids = vizIDs
         isLoading = true
-        var fetched: [Tile] = []
-        do {
-            fetched = Array(try await DashboardService().fetchTiles(geoID: geo, vizIDs: ids).prefix(3))
-        } catch {
-            debugLog("Dashboard load error:", error)
+        var shown = false
+        for await fetched in DashboardService.tiles(geoID: geo, vizIDs: ids) {
+            guard geo == selectedGeoID, ids == vizIDs else { return }
+            shown = true
+            withAnimation(.easeInOut(duration: 0.2)) {
+                tiles = Array(fetched.prefix(3))
+                isLoading = false
+            }
         }
-        guard geo == selectedGeoID, ids == vizIDs else { return }
+        guard geo == selectedGeoID, ids == vizIDs, !shown else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
-            tiles = fetched
+            tiles = []
             isLoading = false
         }
     }
@@ -757,18 +757,10 @@ struct VizPickerView: View {
 
     private func loadVizzes() async {
         guard let url = URL(string: "https://data.indianarealtors.com/app/vizzes/") else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            let decoded = try JSONDecoder().decode([VizItem].self, from: data)
-            await MainActor.run {
-                self.all = decoded
-                self.isLoading = false
-            }
-        } catch {
-            await MainActor.run { self.isLoading = false }
-#if DEBUG
-            debugLog("viz fetch failed:", error)
-#endif
+        let decoded = await HubCache.value(url, family: .catalog, as: [VizItem].self) ?? []
+        await MainActor.run {
+            self.all = decoded
+            self.isLoading = false
         }
     }
 }

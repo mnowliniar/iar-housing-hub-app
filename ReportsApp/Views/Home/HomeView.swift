@@ -55,6 +55,27 @@ struct HomeView: View {
             }
             .padding(.vertical, 4)
             .padding(.bottom, 12)
+            // A new stamp rebuilds the page: every section shows what it
+            // has, then checks the Hub again.
+            .id(app.reloadStamp)
+        }
+        .refreshable {
+            await Freshness.shared.invalidate()
+            app.reloadStamp += 1
+        }
+        .task {
+            // Once per launch: the charts for the member's markets, so
+            // opening one is instant. Nothing is fetched when the week's
+            // data hasn't moved.
+            guard !app.warmedThisLaunch else { return }
+            app.warmedThisLaunch = true
+            let geos = ([dashboardGeoID] + app.userPrefs.app.favoriteMarketIDs.map(String.init))
+                .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            let vizIDs = app.userPrefs.app.dashboardVizIDs
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await Task.detached(priority: .utility) {
+                await HubCache.warm(geoIDs: geos, vizIDs: vizIDs)
+            }.value
         }
         .hubPage()
         .navigationTitle("Home")
@@ -207,11 +228,19 @@ struct Blog: Decodable, Identifiable {
 }
 
 final class BlogService {
+    static let url = URL(string: "https://data.indianarealtors.com/api/research")!
+
     static func fetch() async throws -> [Blog] {
-        let url = URL(string: "https://data.indianarealtors.com/api/research")!
-        let (data, _) = try await URLSession.shared.data(for: .app(url))
+        guard let data = await HubCache.data(url, family: .blogs) else { throw URLError(.cannotLoadFromNetwork) }
         let root = try JSONDecoder().decode([String:[Blog]].self, from: data) // { "gresults": [...] }
         return root["gresults"] ?? []
+    }
+
+    /// Cached posts first, then the Hub's when a post was published.
+    static func stream() -> AsyncStream<[Blog]> {
+        HubCache.stream(url, family: .blogs) { data in
+            try JSONDecoder().decode([String:[Blog]].self, from: data)["gresults"] ?? []
+        }
     }
 }
 
@@ -240,7 +269,10 @@ struct BlogRail: View {
             .scrollClipDisabled()
         }
         .task {
-            do { items = try await BlogService.fetch() } catch { items = [] }
+            for await list in BlogService.stream() {
+                items = list
+                loading = false
+            }
             loading = false
         }
     }
@@ -340,11 +372,22 @@ struct ReportListItem: Decodable, Identifiable {
 }
 
 final class ReportsService {
-    static func fetch(limit: Int = 12) async throws -> [ReportListItem] {
+    static func url(limit: Int = 12) -> URL {
         var comps = URLComponents(string: "https://data.indianarealtors.com/app/reports/latest/")!
         comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
-        let (data, _) = try await URLSession.shared.data(for: .app(comps.url!))
+        return comps.url!
+    }
+
+    static func fetch(limit: Int = 12) async throws -> [ReportListItem] {
+        guard let data = await HubCache.data(url(limit: limit), family: .data) else {
+            throw URLError(.cannotLoadFromNetwork)
+        }
         return try JSONDecoder().decode([ReportListItem].self, from: data)
+    }
+
+    /// Cached list first, then the Hub's when a report was built.
+    static func stream(limit: Int = 12) -> AsyncStream<[ReportListItem]> {
+        HubCache.stream(url(limit: limit), family: .data, as: [ReportListItem].self)
     }
 }
 
@@ -373,7 +416,10 @@ struct ReportsRail: View {
             .scrollClipDisabled()
         }
         .task {
-            do { items = try await ReportsService.fetch() } catch { items = [] }
+            for await list in ReportsService.stream() {
+                items = list
+                loading = false
+            }
             loading = false
         }
     }

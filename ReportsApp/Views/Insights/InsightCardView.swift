@@ -403,11 +403,13 @@ struct InsightRail: View {
 
     private func load() async {
         loading = true
-        let list = await APIService.fetchInsightPreview(geoID: geoID, top: 6)
-        guard !Task.isCancelled else { return }
-        insights = list
+        for await list in APIService.insightPreviewStream(geoID: geoID, top: 6) {
+            guard !Task.isCancelled else { return }
+            insights = list
+            loading = false
+            vizData = await InsightSupport.loadVizData(for: list)
+        }
         loading = false
-        vizData = await InsightSupport.loadVizData(for: list)
     }
 
     @MainActor

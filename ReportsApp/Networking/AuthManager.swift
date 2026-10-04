@@ -218,6 +218,7 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "chat_user_id")
         session = nil
         AppIdentity.authorization = nil
+        HubCache.clear()
     }
 }
 

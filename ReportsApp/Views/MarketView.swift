@@ -77,13 +77,11 @@ struct MarketView: View {
             ])
             await loadCurrentGeo()
             await loadInsights()
-            await loadInsightVizData()
         }
         .onChange(of: geoID) { _, _ in
             Task {
                 await loadCurrentGeo()
                 await loadInsights()
-                await loadInsightVizData()
             }
         }
         .fullScreenCover(item: $openedInsight) { item in
@@ -440,9 +438,12 @@ struct MarketView: View {
         }
 
         isLoadingInsights = true
-        defer { isLoadingInsights = false }
-
-        insights = await APIService.fetchInsightPreview(geoID: trimmedID, top: 5)
+        for await list in APIService.insightPreviewStream(geoID: trimmedID, top: 5) {
+            insights = list
+            isLoadingInsights = false
+            await loadInsightVizData()
+        }
+        isLoadingInsights = false
     }
 
     private var householdText: String {
@@ -524,7 +525,6 @@ struct InsightsView: View {
         .task {
             await loadCurrentGeo()
             await loadInsights()
-            await loadInsightVizData()
         }
         .fullScreenCover(item: $openedInsight) { item in
             InsightDetailView(insights: insights,
@@ -823,9 +823,12 @@ struct InsightsView: View {
         }
 
         isLoadingInsights = true
-        defer { isLoadingInsights = false }
-
-        insights = await APIService.fetchInsightPreview(geoID: trimmedID, top: 20)
+        for await list in APIService.insightPreviewStream(geoID: trimmedID, top: 20) {
+            insights = list
+            isLoadingInsights = false
+            await loadInsightVizData()
+        }
+        isLoadingInsights = false
     }
 
     private func loadInsightVizData() async {

@@ -39,7 +39,9 @@ struct ReportListView: View {
         .onAppear {
             if app.showDigest { showDigestLocal = true }
             Task {
-                reportsByCategory = await APIService.fetchReportsGrouped()
+                for await grouped in APIService.reportsGroupedStream() {
+                    reportsByCategory = grouped
+                }
             }
         }
     }

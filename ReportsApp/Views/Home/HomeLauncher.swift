@@ -64,12 +64,11 @@ final class HomeLauncherModel: ObservableObject {
 
     func load() async {
         if let url = URL(string: "\(ChatManager.serverBaseURL)/app/home/")?.appendingChatUserID() {
-            let reply = try? await URLSession.shared.data(for: .app(url))
-            if let data = reply?.0,
-               let payload = try? JSONDecoder().decode(HomePayload.self, from: data) {
+            for await payload in HubCache.stream(url, family: .member, as: HomePayload.self) {
                 habits = payload.habits ?? []
                 markets = payload.markets ?? []
                 areas = payload.areas ?? []
+                loaded = true
             }
         }
         let runs = try? await SparkLibraryService.runs(limit: 5)

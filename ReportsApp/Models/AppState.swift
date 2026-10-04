@@ -119,6 +119,9 @@ final class AppState: ObservableObject {
     @Published var recipeToRun: SparkRecipe? = nil
     @Published var activeReport: ActiveReport? = nil
     @Published var showDigest: Bool = false
+    /// Bumped on pull-to-refresh and after a long time away: Home rebuilds.
+    @Published var reloadStamp: Int = 0
+    var warmedThisLaunch = false
 
     private let prefsService = UserPrefsService()
 

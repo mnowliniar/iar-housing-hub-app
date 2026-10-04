@@ -87,57 +87,33 @@ struct APIService {
     static let baseURL = URL(string: "https://data.indianarealtors.com/app/reports/")!
 
     static func fetchReportsGrouped() async -> [String: [Report]] {
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(baseURL))
+        let reports = await HubCache.value(baseURL, family: .catalog, as: [Report].self) ?? []
+        return Dictionary(grouping: reports, by: { $0.category })
+    }
+
+    /// Cached list first, then the Hub's when the catalog changed.
+    static func reportsGroupedStream() -> AsyncStream<[String: [Report]]> {
+        HubCache.stream(baseURL, family: .catalog) { data in
             let reports = try JSONDecoder().decode([Report].self, from: data)
             return Dictionary(grouping: reports, by: { $0.category })
-        } catch {
-            debugLog("Failed to fetch reports: \(error)")
-            return [:]
         }
     }
     
     static func fetchGeoTypes() async -> [String] {
         guard let url = URL(string: "https://data.indianarealtors.com/app/geotypes/") else { return [] }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode([String].self, from: data)
-        } catch {
-            debugLog("❌ Error fetching geo types: \(error)")
-            return []
-        }
+        return await HubCache.value(url, family: .catalog, as: [String].self) ?? []
     }
 
     static func fetchGeos(ofType type: String) async -> [Geo] {
         guard let encodedType = type.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "https://data.indianarealtors.com/app/geos/?type=\(encodedType)") else { return [] }
-        do {
-            debugLog("Fetch geos from url: \(url)")
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode([Geo].self, from: data)
-        } catch {
-            debugLog("❌ Error fetching geos: \(error)")
-            return []
-        }
+        return await HubCache.value(url, family: .catalog, as: [Geo].self) ?? []
     }
 
     static func fetchGeo(geoid: String) async -> Geo? {
         guard let url = URL(string: "https://data.indianarealtors.com/app/geo/\(geoid)") else { return nil }
 
-        do {
-            debugLog("Fetch geo from url: \(url)")
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-
-            if let raw = String(data: data, encoding: .utf8) {
-                debugLog("[Geo] raw response:", raw)
-            }
-
-            let decoded = try JSONDecoder().decode([Geo].self, from: data)
-            return decoded.first
-        } catch {
-            debugLog("❌ Error fetching geo:", error)
-            return nil
-        }
+        return await HubCache.value(url, family: .catalog, as: [Geo].self)?.first
     }
     
     static func fetchInsightPreview(geoID: String, top: Int = 5) async -> [InsightPreviewItem] {
@@ -148,22 +124,19 @@ struct APIService {
         ]
 
         guard let url = components.url else { return [] }
-        debugLog("[InsightPreview] requesting:", url)
+        return await HubCache.value(url, family: .data, as: InsightPreviewResponse.self)?.results ?? []
+    }
 
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            if let raw = String(data: data, encoding: .utf8) {
-                debugLog("[InsightPreview] raw response:", raw)
-            }
-            let decoded = try JSONDecoder().decode(InsightPreviewResponse.self, from: data)
-            debugLog("[InsightPreview] decoded results count:", decoded.results.count)
-            for r in decoded.results {
-                debugLog("[InsightPreview] item -> source_id:", r.sourceID ?? -1, "type:", r.type ?? "nil", "bucket:", r.bucket ?? "nil")
-            }
-            return decoded.results
-        } catch {
-            debugLog("❌ Error fetching insight preview: \(error)")
-            return []
+    /// Cached insights first, then this week's when the data moved.
+    static func insightPreviewStream(geoID: String, top: Int = 5) -> AsyncStream<[InsightPreviewItem]> {
+        var components = URLComponents(string: "https://data.indianarealtors.com/reports/insights/preview/")!
+        components.queryItems = [
+            URLQueryItem(name: "geo_id", value: geoID),
+            URLQueryItem(name: "top", value: String(top))
+        ]
+        guard let url = components.url else { return AsyncStream { $0.finish() } }
+        return HubCache.stream(url, family: .data) { data in
+            try JSONDecoder().decode(InsightPreviewResponse.self, from: data).results
         }
     }
     
@@ -183,52 +156,24 @@ struct APIService {
         }
 
         guard let url = components.url else { return nil }
-        debugLog("[InsightViz] requesting:", url)
-
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            if let raw = String(data: data, encoding: .utf8) {
-                debugLog("[InsightViz] raw response:", raw)
-            }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                debugLog("❌ Error fetching insight viz data: response was not an object")
-                return nil
-            }
-
-            let chartData = json["chart_data"] as? [[String: Any]] ?? []
-            let bucket = json["bucket"] as? String
-            let unit = json["unit"] as? String
-            let format = json["format"] as? String
-
-            debugLog("[InsightViz] parsed -> instance:", instanceID)
-            debugLog("[InsightViz] bucket:", bucket ?? "nil")
-            debugLog("[InsightViz] unit:", unit ?? "nil")
-            debugLog("[InsightViz] format:", format ?? "nil")
-            debugLog("[InsightViz] chart rows:", chartData.count)
-
-            return InsightVizData(
-                chartData: chartData,
-                bucket: bucket,
-                unit: unit,
-                format: format,
-                geoPct: json["geo_pct"] as? Double,
-                statePct: json["state_pct"] as? Double
-            )
-        } catch {
-            debugLog("❌ Error fetching insight viz data: \(error)")
+        guard let data = await HubCache.data(url, family: .data),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            debugLog("❌ Error fetching insight viz data for", instanceID)
             return nil
         }
+        return InsightVizData(
+            chartData: json["chart_data"] as? [[String: Any]] ?? [],
+            bucket: json["bucket"] as? String,
+            unit: json["unit"] as? String,
+            format: json["format"] as? String,
+            geoPct: json["geo_pct"] as? Double,
+            statePct: json["state_pct"] as? Double
+        )
     }
     
     static func fetchReportDates(reportID: Int) async -> [ReportDate] {
         guard let url = URL(string: "https://data.indianarealtors.com/app/reports/\(reportID)/dates/") else { return [] }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode([ReportDate].self, from: data)
-        } catch {
-            debugLog("❌ Error fetching report dates: \(error)")
-            return []
-        }
+        return await HubCache.value(url, family: .data, as: [ReportDate].self) ?? []
     }
     
     static func fetchReportSummary(reportID: Int, updateDate: String, geoID: Int) async -> ReportSummary? {
@@ -238,22 +183,16 @@ struct APIService {
         let urlString = "https://data.indianarealtors.com/app/reports/\(reportID)/\(comps[0])/\(comps[1])/\(comps[2])/\(geoID)/"
 
         guard let url = URL(string: urlString) else { return nil }
-
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode(ReportSummary.self, from: data)
-        } catch {
-            debugLog("❌ Error fetching report summary: \(error)")
-            return nil
-        }
+        return await HubCache.value(url, family: .data, as: ReportSummary.self)
     }
     
     static func fetchLatestReportDate(reportID: Int, geoID: String) async throws -> String {
         var comps = URLComponents(string: "https://data.indianarealtors.com/app/reports/\(reportID)/latest-date")!
         comps.queryItems = [URLQueryItem(name: "geo", value: geoID)]
-        let (data, _) = try await URLSession.shared.data(for: .app(comps.url!))
-        let decoded = try JSONDecoder().decode(LatestDateResponse.self, from: data)
-        return decoded.date
+        guard let data = await HubCache.data(comps.url!, family: .data) else {
+            throw URLError(.cannotLoadFromNetwork)
+        }
+        return try JSONDecoder().decode(LatestDateResponse.self, from: data).date
     }
 
     static func fetchDigest() async -> DigestResponse? {

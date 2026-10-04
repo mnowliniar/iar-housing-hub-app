@@ -145,16 +145,19 @@ struct MarketDashboardSection: View {
         showSkeletonTiles = true
         showLoadedTiles = false
 
-        do {
-            let svc = DashboardService()
-            let fetched = try await svc.fetchTiles(geoID: trimmedID, vizIDs: vizIDs)
+        var shown = false
+        for await fetched in DashboardService.tiles(geoID: trimmedID, vizIDs: vizIDs) {
             tiles = Array(fetched.prefix(3))
-        } catch {
-#if DEBUG
-            debugLog("MarketDashboardSection load error:", error)
-#endif
-            tiles = []
+            if !shown {
+                shown = true
+                isLoading = false
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showLoadedTiles = true
+                    showSkeletonTiles = false
+                }
+            }
         }
+        if !shown { tiles = [] }
 
         isLoading = false
         withAnimation(.easeInOut(duration: 0.25)) {
