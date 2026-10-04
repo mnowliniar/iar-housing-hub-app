@@ -36,7 +36,7 @@ actor Freshness {
         }
         if let inflight { return await inflight.value }
         let task = Task<[String: String]?, Never> {
-            guard let url = URL(string: "\(ChatManager.serverBaseURL)/app/fresh/") else { return nil }
+            guard let url = URL(string: "https://\(AppIdentity.hubHost)/app/fresh/") else { return nil }
             var request = URLRequest.app(url)
             request.timeoutInterval = 8
             request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -209,22 +209,5 @@ enum HubCache {
         let file = fileURL(for: url)
         memory.setObject(raw as NSData, forKey: file.lastPathComponent as NSString)
         try? raw.write(to: file, options: .atomic)
-    }
-}
-
-// MARK: - Warming favorites
-
-extension HubCache {
-    /// After launch: the dashboard, insights and charts for the member's
-    /// favorite markets, so opening one is instant. Each call goes through
-    /// `data(_:family:)`, so nothing is fetched twice and nothing is fetched
-    /// at all when the week's data hasn't moved.
-    static func warm(geoIDs: [String], vizIDs: [Int]) async {
-        for geoID in geoIDs {
-            if Task.isCancelled { return }
-            _ = try? await DashboardService().fetchTiles(geoID: geoID, vizIDs: vizIDs)
-            let insights = await APIService.fetchInsightPreview(geoID: geoID, top: 6)
-            _ = await InsightSupport.loadVizData(for: insights)
-        }
     }
 }

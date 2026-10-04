@@ -116,6 +116,7 @@
 				Networking/APIService.swift,
 				Utilities/AppIdentity.swift,
 				Utilities/DebugLog.swift,
+				Utilities/HubCache.swift,
 				Views/WatchHomeView.swift,
 				Views/WatchSettingsView.swift,
 			);
