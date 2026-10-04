@@ -162,7 +162,23 @@ struct HomeLauncherView: View {
                             title: "My Digest", subtitle: "Favorite reports and markets")
             }
             .buttonStyle(.plain)
+            Button {
+                Task { await openOnWeb(marketPackPath, key: "pack") }
+            } label: {
+                LauncherRow(icon: "square.grid.2x2", tint: BrandColors.teal,
+                            title: "Market Pack", subtitle: "This month's cards and reel for your market",
+                            trailingProgress: openingArea == "pack")
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    /// The web's Market Pack, opened on the dashboard market. Indiana is
+    /// never a pack default on the web, so for it the page picks the
+    /// member's own markets.
+    private var marketPackPath: String {
+        let id = app.userPrefs.app.dashboardGeoID ?? ""
+        return (id.isEmpty || id == "18") ? "/market-pack/" : "/market-pack/\(id)/"
     }
 
     // MARK: Your markets

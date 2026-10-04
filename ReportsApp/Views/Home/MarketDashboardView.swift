@@ -624,8 +624,8 @@ struct MetricTile: View {
             Text(tile.title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .lineLimit(2, reservesSpace: true)
+                .fixedSize(horizontal: false, vertical: true)
             if let value = tile.latestValue {
                 Text(formatTileValue(value, format: tile.vizFormat))
                     .font(.title3.weight(.bold))
@@ -650,6 +650,7 @@ struct MetricTileSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(width: 60, height: 10)
+            RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(width: 40, height: 10)
             RoundedRectangle(cornerRadius: 4).fill(Color(.systemGray4)).frame(width: 70, height: 20)
             RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray5)).frame(width: 40, height: 9)
             RoundedRectangle(cornerRadius: 3).fill(Color(.systemGray6)).frame(height: 22).padding(.top, 4)

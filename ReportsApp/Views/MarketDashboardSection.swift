@@ -32,18 +32,15 @@ struct MarketDashboardSection: View {
     var body: some View {
         Group {
             if hSize == .compact {
-                ZStack(alignment: .topLeading) {
-                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                // The same strip as Home: three small tiles in one row.
+                HStack(alignment: .top, spacing: 10) {
+                    if showSkeletonTiles && tiles.isEmpty {
                         ForEach(0..<min(3, vizIDs.count), id: \.self) { _ in
-                            TileCardSkeleton()
+                            MetricTileSkeleton()
                         }
-                    }
-                    .opacity(showSkeletonTiles ? 1 : 0)
-
-                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                    } else {
                         ForEach(tiles) { tile in
-                            TileCard(tile: tile)
-                                .opacity(showLoadedTiles ? 1 : 0)
+                            MetricTile(tile: tile)
                         }
                     }
                 }
