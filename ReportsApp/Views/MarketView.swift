@@ -11,7 +11,9 @@ import Charts
 import LinkPresentation
 
 struct MarketView: View {
-    let geoID: Int
+    /// The market on screen. Starts as the one that opened the page and
+    /// follows the picker, so "Change market" changes this page.
+    @State private var currentGeoID: Int
     @EnvironmentObject var app: AppState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showGeoPicker = false
@@ -23,6 +25,10 @@ struct MarketView: View {
     @State private var shareItem: InsightShareItem?
     @State private var openedInsight: InsightIndex?
 
+    init(geoID: Int) {
+        _currentGeoID = State(initialValue: geoID)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -31,7 +37,7 @@ struct MarketView: View {
                 HubSectionHeader(title: "Your key indicators")
                     .padding(.horizontal, 16)
 
-                MarketDashboardSection(geoID: String(geoID))
+                MarketDashboardSection(geoID: String(currentGeoID))
                     .frame(maxWidth: .infinity, minHeight: dashboardMinHeight, alignment: .top)
                     .layoutPriority(1)
                     .padding(.bottom, 8)
@@ -44,7 +50,7 @@ struct MarketView: View {
                     Spacer()
 
                     NavigationLink {
-                        InsightsView(geoID: geoID)
+                        InsightsView(geoID: currentGeoID)
                     } label: {
                         Text("View all")
                             .font(.subheadline.weight(.semibold))
@@ -72,13 +78,13 @@ struct MarketView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             EventTracker.fire(.viewMarkets, metadata: [
-                "geo_id": String(geoID),
+                "geo_id": String(currentGeoID),
                 "surface": "ios_app",
             ])
             await loadCurrentGeo()
             await loadInsights()
         }
-        .onChange(of: geoID) { _, _ in
+        .onChange(of: currentGeoID) { _, _ in
             Task {
                 await loadCurrentGeo()
                 await loadInsights()
@@ -98,9 +104,10 @@ struct MarketView: View {
             ActivityViewController(activityItems: [item.activityItemSource])
         }
         .sheet(isPresented: $showGeoPicker) {
-            GeoPickerSheet { newGeoID in
+            GeoPickerSheet(current: currentGeoID) { newGeoID in
                 app.selectedGeoID = newGeoID
                 app.saveUserPrefs()
+                if let id = Int(newGeoID) { currentGeoID = id }
             }
         }
     }
@@ -222,7 +229,7 @@ struct MarketView: View {
 
     private var chatLauncherItems: [(title: String, systemImage: String, query: String)] {
         let marketName = activeGeo?.displayName ?? "this market"
-        let marketID = activeGeo?.geoid ?? geoID
+        let marketID = activeGeo?.geoid ?? currentGeoID
         let marketRef = "\(marketName) (id:\(marketID))"
 
         return [
@@ -237,7 +244,7 @@ struct MarketView: View {
 
     private var startChatQuery: String {
         let marketName = activeGeo?.displayName ?? "this market"
-        let marketID = activeGeo?.geoid ?? geoID
+        let marketID = activeGeo?.geoid ?? currentGeoID
         let marketRef = "\(marketName) (id:\(marketID))"
         return "I want to chat about the real estate market in \(marketRef) Reply with a brief paragraph no chart or table and follow up with helpful questions"
     }
@@ -431,7 +438,7 @@ struct MarketView: View {
     }
 
     private func loadInsights() async {
-        let trimmedID = String(geoID).trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedID = String(currentGeoID).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty else {
             insights = []
             return
@@ -454,7 +461,7 @@ struct MarketView: View {
     }
 
     private func loadCurrentGeo() async {
-        let trimmedID = String(geoID).trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedID = String(currentGeoID).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty else {
             activeGeo = nil
             return

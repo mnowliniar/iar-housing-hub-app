@@ -107,11 +107,10 @@ struct HomeView: View {
             dashboardGeo = await APIService.fetchGeo(geoid: dashboardGeoID)
         }
         .sheet(isPresented: $showGeoPicker) {
-            GeoPickerSheet { newGeo in
+            GeoPickerSheet(current: Int(dashboardGeoID)) { newGeo in
                 app.selectedGeoID = newGeo
                 app.userPrefs.app.dashboardGeoID = newGeo
                 app.saveUserPrefs()
-                showGeoPicker = false
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -615,150 +614,6 @@ extension View {
             .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 }
-
-final class FavoriteGeoService {
-    static func fetchGeoTypes() async -> [String] {
-        guard let url = URL(string: "https://data.indianarealtors.com/app/geotypes/") else { return [] }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode([String].self, from: data)
-        } catch {
-            debugLog("❌ Error fetching geo types: \(error)")
-            return []
-        }
-    }
-
-    static func fetchGeos(ofType type: String) async -> [Geo] {
-        guard let encodedType = type.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://data.indianarealtors.com/app/geos/?type=\(encodedType)") else { return [] }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: .app(url))
-            return try JSONDecoder().decode([Geo].self, from: data)
-        } catch {
-            debugLog("❌ Error fetching geos: \(error)")
-            return []
-        }
-    }
-}
-
-struct FavoriteMarketPickerSheet: View {
-    let existingIDs: [Int]
-    let onSelect: (Geo) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var geotypes: [String] = []
-    @State private var selectedType: String = ""
-    @State private var geos: [Geo] = []
-    @State private var selectedGeo: Geo?
-    @State private var isLoadingTypes = true
-    @State private var isLoadingGeos = false
-
-    private var availableGeos: [Geo] {
-        geos.filter { !existingIDs.contains($0.geoid) }
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Market type") {
-                    if isLoadingTypes {
-                        ProgressView()
-                    } else {
-                        Picker("Geo type", selection: $selectedType) {
-                            ForEach(geotypes, id: \.self) { type in
-                                Text(type).tag(type)
-                            }
-                        }
-                        .pickerStyle(.navigationLink)
-                    }
-                }
-
-                Section("Market") {
-                    if isLoadingGeos {
-                        ProgressView()
-                    } else if availableGeos.isEmpty {
-                        Text("No markets available")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("Geo", selection: $selectedGeo) {
-                            Text("Select a market").tag(nil as Geo?)
-                            ForEach(availableGeos, id: \.self) { geo in
-                                Text(geo.displayName).tag(Optional(geo))
-                            }
-                        }
-                        .pickerStyle(.navigationLink)
-                    }
-                }
-            }
-            .navigationTitle("Add Favorite Market")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        if let selectedGeo {
-                            onSelect(selectedGeo)
-                            dismiss()
-                        }
-                    }
-                    .disabled(selectedGeo == nil)
-                }
-            }
-            .task {
-                if geotypes.isEmpty {
-                    await loadTypes()
-                }
-            }
-            .onChange(of: selectedType) { _, newValue in
-                Task { await loadGeos(for: newValue) }
-            }
-        }
-    }
-
-    private func loadTypes() async {
-        isLoadingTypes = true
-        let fetched = await FavoriteGeoService.fetchGeoTypes()
-
-        let nextType: String = {
-            if fetched.contains(selectedType) && !selectedType.isEmpty {
-                return selectedType
-            }
-            return fetched.first ?? ""
-        }()
-
-        await MainActor.run {
-            geotypes = fetched
-            selectedType = nextType
-            isLoadingTypes = false
-        }
-
-        if !nextType.isEmpty {
-            await loadGeos(for: nextType)
-        }
-    }
-
-    private func loadGeos(for type: String) async {
-        guard !type.isEmpty else { return }
-
-        let previousSelectionID = selectedGeo?.geoid
-
-        await MainActor.run {
-            isLoadingGeos = true
-        }
-
-        let fetched = await FavoriteGeoService.fetchGeos(ofType: type)
-        let filtered = fetched.filter { !existingIDs.contains($0.geoid) }
-        let restoredSelection = filtered.first(where: { $0.geoid == previousSelectionID })
-
-        await MainActor.run {
-            geos = fetched
-            selectedGeo = restoredSelection
-            isLoadingGeos = false
-        }
-    }
-}
-
 
 /// Account and app details. Sign out lives here now, off the Home page.
 private struct SettingsSheet: View {

@@ -484,7 +484,7 @@ struct MarketDashboardView: View {
             }
         }
         .sheet(isPresented: $showGeoPicker) {
-            GeoPickerSheet(onSelectGeo: { newGeo in
+            GeoPickerSheet(current: Int(selectedGeoID), onSelectGeo: { newGeo in
                 app.selectedGeoID = newGeo
                 app.userPrefs.app.dashboardGeoID = newGeo
                 app.saveUserPrefs()
