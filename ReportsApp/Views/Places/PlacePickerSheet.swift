@@ -173,7 +173,7 @@ struct PlacePickerSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("County, ZIP, town, township, metro…", text: $query)
+            TextField("County, ZIP, township, metro…", text: $query)
                 .focused($searchFocused)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
@@ -262,7 +262,7 @@ struct PlacePickerSheet: View {
                 }
             }
         } else if here != nil || dashboard != nil || !favorites.isEmpty || statewide != nil || !recents.isEmpty {
-            Section("Before you type") {
+            Section("Suggested") {
                 if let here, !excluding.contains(here.geoid) {
                     quickRow(icon: "location.fill", title: "You're in \(here.zip)",
                              sub: "\(here.place) · from your location", id: here.geoid) {
@@ -370,14 +370,6 @@ struct PlacePickerSheet: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                if let heat = place.heat?.label, !heat.isEmpty {
-                    Text(heat)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(BrandColors.magenta)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(BrandColors.magenta.opacity(0.10), in: Capsule())
-                }
                 if place.id == current {
                     Image(systemName: "checkmark")
                         .font(.subheadline.weight(.semibold))
