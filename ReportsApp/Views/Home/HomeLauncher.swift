@@ -162,23 +162,7 @@ struct HomeLauncherView: View {
                             title: "My Digest", subtitle: "Favorite reports and markets")
             }
             .buttonStyle(.plain)
-            Button {
-                Task { await openOnWeb(marketPackPath, key: "pack") }
-            } label: {
-                LauncherRow(icon: "square.grid.2x2", tint: BrandColors.teal,
-                            title: "Market Pack", subtitle: "This month's cards and reel for your market",
-                            trailingProgress: openingArea == "pack")
-            }
-            .buttonStyle(.plain)
         }
-    }
-
-    /// The web's Market Pack, opened on the dashboard market. Indiana is
-    /// never a pack default on the web, so for it the page picks the
-    /// member's own markets.
-    private var marketPackPath: String {
-        let id = app.userPrefs.app.dashboardGeoID ?? ""
-        return (id.isEmpty || id == "18") ? "/market-pack/" : "/market-pack/\(id)/"
     }
 
     // MARK: Your markets
@@ -411,4 +395,79 @@ private struct HeatPill: View {
             .padding(.vertical, 3)
             .background(color.opacity(0.12), in: Capsule())
     }
+}
+
+// MARK: - Market Pack
+
+/// The month's Market Pack, as its own card on Home: the web's pack page
+/// (cards, templates, reel, downloads) opened signed in, on the dashboard
+/// market. Indiana is never a pack default on the web, so for it the page
+/// picks the member's own markets.
+struct MarketPackCard: View {
+    @EnvironmentObject var app: AppState
+    @State private var webLink: HomeWebLinkItem?
+    @State private var opening = false
+
+    private var packPath: String {
+        let id = app.userPrefs.app.dashboardGeoID ?? ""
+        return (id.isEmpty || id == "18") ? "/market-pack/" : "/market-pack/\(id)/"
+    }
+
+    private var monthName: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        return formatter.string(from: Date())
+    }
+
+    var body: some View {
+        Button {
+            Task { await open() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(BrandColors.teal)
+                    .frame(width: 32, height: 32)
+                    .background(BrandColors.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Market Pack")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("\(monthName)'s cards and reel, ready to post")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if opening {
+                    ProgressView()
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .hubCard(padding: 12)
+        }
+        .buttonStyle(.plain)
+        .sheet(item: $webLink) { item in
+            SafariView(url: item.url)
+                .ignoresSafeArea()
+        }
+    }
+
+    private func open() async {
+        opening = true
+        defer { opening = false }
+        let signedIn = try? await SparkLibraryService.webLink(path: packPath)
+        if let signedIn {
+            webLink = HomeWebLinkItem(url: signedIn)
+        } else if let plain = URL(string: ChatManager.serverBaseURL + packPath) {
+            webLink = HomeWebLinkItem(url: plain)
+        }
+    }
+}
+
+struct HomeWebLinkItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }

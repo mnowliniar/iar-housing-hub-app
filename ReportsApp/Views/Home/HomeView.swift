@@ -45,6 +45,9 @@ struct HomeView: View {
                 LocationChip()
                     .padding(.horizontal)
 
+                MarketPackCard()
+                    .padding(.horizontal)
+
                 HomeLauncherView()
 
                 BlogRail()
