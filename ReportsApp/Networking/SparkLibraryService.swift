@@ -41,6 +41,14 @@ enum SparkLibraryService {
         try await get("/recipes/", as: RecipeList.self)
     }
 
+    /// Questions for a new chat, one per market the member keeps. Shows the
+    /// cached set when the Hub is slow.
+    static func starters() async -> [SparkStarter] {
+        struct Reply: Decodable { let starters: [SparkStarter]? }
+        guard let url = URL(string: base + "/app/spark/starters/") else { return [] }
+        return await HubCache.value(url, family: .member, as: Reply.self)?.starters ?? []
+    }
+
     static func schedules() async throws -> [SparkSchedule] {
         struct Wrapper: Decodable { let schedules: [SparkSchedule]? }
         return try await get("/schedules/", as: Wrapper.self).schedules ?? []

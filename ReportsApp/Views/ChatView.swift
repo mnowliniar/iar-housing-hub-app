@@ -22,6 +22,9 @@ struct ChatView: View {
     @State private var recipeSetup: SparkRecipe?
     @StateObject private var runLibrary = SparkLibraryModel()
     @State private var isConsumingSparkPrompt = false
+    @State private var starters: [SparkStarter] = []
+    @State private var topRecipe: SparkRecipe?
+    @State private var myPlaces: [Place] = []
 
     private func associatedGutsText(for index: Int) -> String? {
         guard chat.messages.indices.contains(index) else { return nil }
@@ -115,11 +118,52 @@ struct ChatView: View {
         return !prompt.isEmpty
     }
 
+    private var sendEnabled: Bool {
+        !chat.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !chat.isSending
+    }
+
+    /// A market chip puts its name in the box; the member finishes the question.
+    private func typeIntoBox(_ label: String) {
+        let current = chat.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        chat.inputText = current.isEmpty ? label + " " : current + " " + label + " "
+        inputFocused = true
+    }
+
+    /// What the empty screen offers: starters, the top recipe, the member's
+    /// markets, recent chats. Each comes from the cache first.
+    @MainActor
+    private func loadWelcome() async {
+        starters = await SparkLibraryService.starters()
+        let recipeList = try? await SparkLibraryService.recipes()
+        if let list = recipeList {
+            topRecipe = list.recipes.filter { $0.uses > 0 }.max(by: { $0.uses < $1.uses })
+                ?? list.recipes.first ?? list.starters.first
+        }
+        if chat.chats.isEmpty {
+            await chat.fetchChats()
+        }
+        for await top in PlacesService.top() {
+            var places: [Place] = []
+            if let d = top.mine?.dashboard { places.append(d) }
+            places.append(contentsOf: top.mine?.favorites ?? [])
+            if let s = top.mine?.statewide { places.append(s) }
+            myPlaces = places
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(chat.conversationName ?? "Chat")
-                    .font(.headline)
+            // One bar: the mark, the chat's name once it has one, the tools.
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 1) {
+                    SparkWordmark(size: 22)
+                    if !chat.messages.isEmpty, let name = chat.conversationName, !name.isEmpty {
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer()
 
                 if !chat.messages.isEmpty {
@@ -130,7 +174,6 @@ struct ChatView: View {
                             .labelStyle(.iconOnly)
                     }
                     .buttonStyle(.plain)
-                    .padding(.trailing, 8)
                 }
 
                 Button {
@@ -141,13 +184,20 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button("New") {
+                Button {
                     chat.newChat()
+                } label: {
+                    Label("New chat", systemImage: "square.and.pencil")
+                        .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.plain)
+                .disabled(chat.messages.isEmpty && !chat.isSending)
             }
-            .padding()
-
-            Divider()
+            .font(.body.weight(.medium))
+            .foregroundStyle(BrandColors.teal)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
 
             if !chat.statusMessages.isEmpty {
                 StatusPanel(messages: chat.statusMessages)
@@ -160,14 +210,19 @@ struct ChatView: View {
                     //LazyVStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
                         if chat.messages.isEmpty && !hasPendingSparkPrompt && !isConsumingSparkPrompt {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Ask a question")
-                                    .font(.headline)
-                                Text("Try asking about markets, trends, prices, inventory, or a specific geography.")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
+                            NewChatWelcome(
+                                starters: starters,
+                                recipe: topRecipe,
+                                places: myPlaces,
+                                recents: Array(chat.chats.filter { $0.run == nil }.prefix(3)),
+                                onStarter: { text in
+                                    inputFocused = false
+                                    Task { await chat.send(prompt: text) }
+                                },
+                                onRecipe: { recipe in app.recipeToRun = recipe },
+                                onPlace: { label in typeIntoBox(label) },
+                                onRecent: { threadID in Task { await chat.loadChat(threadID: threadID) } }
+                            )
                         }
 
                         ForEach(Array(chat.messages.enumerated()), id: \.element.id) { index, message in
@@ -234,13 +289,12 @@ struct ChatView: View {
 //                }
             }
 
-            Divider()
-
-            HStack(alignment: .bottom, spacing: 12) {
+            HStack(alignment: .bottom, spacing: 10) {
                 TextField("Ask about the market…", text: $chat.inputText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .lineLimit(1...5)
                     .focused($inputFocused)
+                    .padding(.vertical, 4)
 
                 Button {
                     let trimmed = chat.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -249,20 +303,32 @@ struct ChatView: View {
                     inputFocused = false
                     Task { await chat.sendCurrentMessage() }
                 } label: {
-                    if chat.isSending {
-                        ProgressView()
-                            .frame(width: 28, height: 28)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 28))
+                    ZStack {
+                        Circle().fill(sendEnabled ? BrandColors.teal : HubStyle.chip)
+                        if chat.isSending {
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(sendEnabled ? Color.white : Color.secondary)
+                        }
                     }
+                    .frame(width: 30, height: 30)
                 }
-                .disabled(chat.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chat.isSending)
+                .buttonStyle(.plain)
+                .disabled(!sendEnabled)
+                .accessibilityLabel("Send")
             }
-            .padding()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(HubStyle.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HubStyle.hairline, lineWidth: 1))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .navigationTitle("Spark")
-        .navigationBarTitleDisplayMode(.inline)
+        .hubPage()
+        .toolbar(.hidden, for: .navigationBar)
+        .task { await loadWelcome() }
         .sheet(item: $activeGutsContent) { item in
             NavigationStack {
                 HTMLTextView(html: item.text)

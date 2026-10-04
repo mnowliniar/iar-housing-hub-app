@@ -16,5 +16,6 @@ struct BrandColors {
     static let magenta  = Color(red: 149/255, green: 33/255,   blue: 94/255)  // #95215e
     static let red      = Color(red: 157/255, green: 20/255,   blue: 13/255)  // #9d140d
     static let teal     = Color(red: 0/255,   green: 170/255,  blue: 185/255) // #00737e
+    static let sparkTeal = Color(red: 0/255,  green: 115/255,  blue: 126/255) // #00737e, the Spark mark
     static let purple   = Color(red: 67/255,  green: 50/255,   blue: 119/255) // #433277
 }

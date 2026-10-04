@@ -591,7 +591,8 @@ private struct NotificationRationaleSheet: View {
 // Convenience initializer so rails can construct a Report with minimal fields
 extension Report {
     init(id: Int, title: String) {
-        self.init(id: id, title: title, description: "", category: "", is_protected: false)
+        self.init(id: id, title: title, description: "", category: "", is_protected: false,
+                  cadence: nil, latest_report_date: nil, latest_update: nil)
     }
 }
 
