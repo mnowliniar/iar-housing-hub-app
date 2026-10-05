@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		71C0FFEE00000000000A0010 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466D2F6B0C3500BBC3B2 /* WidgetKit.framework */; };
+		71C0FFEE00000000000A0011 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466F2F6B0C3600BBC3B2 /* SwiftUI.framework */; };
+		71C0FFEE00000000000A0003 /* IAR Housing Hub Watch WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71C0FFEE00000000000A0002 /* IAR Housing Hub Watch WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		71B9466E2F6B0C3600BBC3B2 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466D2F6B0C3500BBC3B2 /* WidgetKit.framework */; };
 		71B946702F6B0C3600BBC3B2 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71B9466F2F6B0C3600BBC3B2 /* SwiftUI.framework */; };
 		71B946812F6B0C3800BBC3B2 /* IAR Housing Hub WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -14,6 +17,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		71C0FFEE00000000000A0005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 71861B992E5E2EEA00F5F133 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 71C0FFEE00000000000A0001;
+			remoteInfo = "IAR Housing Hub Watch WidgetsExtension";
+		};
 		71861BAF2E5E2EEB00F5F133 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 71861B992E5E2EEA00F5F133 /* Project object */;
@@ -59,6 +69,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		71C0FFEE00000000000A0004 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				71C0FFEE00000000000A0003 /* IAR Housing Hub Watch WidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71B946862F6B0C3800BBC3B2 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -84,6 +105,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		71C0FFEE00000000000A0002 /* IAR Housing Hub Watch WidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "IAR Housing Hub Watch WidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71861BA12E5E2EEA00F5F133 /* ReportsApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReportsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		71861BAE2E5E2EEB00F5F133 /* ReportsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReportsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		71861BB82E5E2EEB00F5F133 /* ReportsAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReportsAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -96,6 +118,23 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		71C0FFEE00000000000A000B /* Exceptions for "IAR Housing Hub Watch Widgets" folder in "IAR Housing Hub Watch WidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 71C0FFEE00000000000A0001 /* IAR Housing Hub Watch WidgetsExtension */;
+		};
+		71C0FFEE00000000000A000C /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub Watch WidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppIntents.swift,
+				BrandColors.swift,
+				DebugLog.swift,
+				WidgetAPI.swift,
+			);
+			target = 71C0FFEE00000000000A0001 /* IAR Housing Hub Watch WidgetsExtension */;
+		};
 		71B946852F6B0C3800BBC3B2 /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub WidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -114,6 +153,7 @@
 				Models/ReportDate.swift,
 				Models/ReportSummary.swift,
 				Networking/APIService.swift,
+				Networking/PlacesService.swift,
 				Utilities/AppIdentity.swift,
 				Utilities/DebugLog.swift,
 				Utilities/HubCache.swift,
@@ -135,6 +175,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		71C0FFEE00000000000A000A /* IAR Housing Hub Watch Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				71C0FFEE00000000000A000B /* Exceptions for "IAR Housing Hub Watch Widgets" folder in "IAR Housing Hub Watch WidgetsExtension" target */,
+			);
+			path = "IAR Housing Hub Watch Widgets";
+			sourceTree = "<group>";
+		};
 		71861BA32E5E2EEA00F5F133 /* ReportsApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -158,6 +206,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				71B946852F6B0C3800BBC3B2 /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub WidgetsExtension" target */,
+				71C0FFEE00000000000A000C /* Exceptions for "IAR Housing Hub Widgets" folder in "IAR Housing Hub Watch WidgetsExtension" target */,
 			);
 			path = "IAR Housing Hub Widgets";
 			sourceTree = "<group>";
@@ -180,6 +229,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		71C0FFEE00000000000A0008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				71C0FFEE00000000000A0011 /* SwiftUI.framework in Frameworks */,
+				71C0FFEE00000000000A0010 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71861B9E2E5E2EEA00F5F133 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -244,6 +302,7 @@
 				71F09F352E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests */,
 				71F09F3F2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests */,
 				71B946712F6B0C3600BBC3B2 /* IAR Housing Hub Widgets */,
+				71C0FFEE00000000000A000A /* IAR Housing Hub Watch Widgets */,
 				71B9466C2F6B0C3500BBC3B2 /* Frameworks */,
 				71861BA22E5E2EEA00F5F133 /* Products */,
 			);
@@ -259,6 +318,7 @@
 				71F09F322E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests.xctest */,
 				71F09F3C2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests.xctest */,
 				71B9466B2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension.appex */,
+				71C0FFEE00000000000A0002 /* IAR Housing Hub Watch WidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -275,6 +335,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		71C0FFEE00000000000A0001 /* IAR Housing Hub Watch WidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71C0FFEE00000000000A000D /* Build configuration list for PBXNativeTarget "IAR Housing Hub Watch WidgetsExtension" */;
+			buildPhases = (
+				71C0FFEE00000000000A0007 /* Sources */,
+				71C0FFEE00000000000A0008 /* Frameworks */,
+				71C0FFEE00000000000A0009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				71C0FFEE00000000000A000A /* IAR Housing Hub Watch Widgets */,
+			);
+			name = "IAR Housing Hub Watch WidgetsExtension";
+			packageProductDependencies = (
+			);
+			productName = "IAR Housing Hub Watch WidgetsExtension";
+			productReference = 71C0FFEE00000000000A0002 /* IAR Housing Hub Watch WidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		71861BA02E5E2EEA00F5F133 /* ReportsApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 71861BC22E5E2EEB00F5F133 /* Build configuration list for PBXNativeTarget "ReportsApp" */;
@@ -376,10 +458,12 @@
 				71F09F222E5FE8E50086B5C3 /* Sources */,
 				71F09F232E5FE8E50086B5C3 /* Frameworks */,
 				71F09F242E5FE8E50086B5C3 /* Resources */,
+				71C0FFEE00000000000A0004 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				71C0FFEE00000000000A0006 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				71F09F272E5FE8E50086B5C3 /* ReportsWatchApp Watch App */,
@@ -461,6 +545,9 @@
 					71B9466A2F6B0C3500BBC3B2 = {
 						CreatedOnToolsVersion = 26.0;
 					};
+					71C0FFEE00000000000A0001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 					71F09F252E5FE8E50086B5C3 = {
 						CreatedOnToolsVersion = 16.4;
 					};
@@ -495,11 +582,19 @@
 				71F09F312E5FE8E70086B5C3 /* ReportsWatchApp Watch AppTests */,
 				71F09F3B2E5FE8E70086B5C3 /* ReportsWatchApp Watch AppUITests */,
 				71B9466A2F6B0C3500BBC3B2 /* IAR Housing Hub WidgetsExtension */,
+				71C0FFEE00000000000A0001 /* IAR Housing Hub Watch WidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		71C0FFEE00000000000A0009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71861B9F2E5E2EEA00F5F133 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -552,6 +647,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		71C0FFEE00000000000A0007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		71861B9D2E5E2EEA00F5F133 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -604,6 +706,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		71C0FFEE00000000000A0006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 71C0FFEE00000000000A0001 /* IAR Housing Hub Watch WidgetsExtension */;
+			targetProxy = 71C0FFEE00000000000A0005 /* PBXContainerItemProxy */;
+		};
 		71861BB02E5E2EEB00F5F133 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 71861BA02E5E2EEA00F5F133 /* ReportsApp */;
@@ -637,6 +744,62 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		71C0FFEE00000000000A000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JY22826US7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "IAR Housing Hub Watch Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Housing Hub";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = IAR.ReportsApp.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		71C0FFEE00000000000A000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JY22826US7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "IAR Housing Hub Watch Widgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Housing Hub";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = IAR.ReportsApp.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 		71861BC02E5E2EEB00F5F133 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -969,6 +1132,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Housing Hub";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location finds the ZIP code you're in, so the watch can show that market's numbers.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = IAR.ReportsApp;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -998,6 +1162,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Housing Hub";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location finds the ZIP code you're in, so the watch can show that market's numbers.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = IAR.ReportsApp;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1097,6 +1262,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		71C0FFEE00000000000A000D /* Build configuration list for PBXNativeTarget "IAR Housing Hub Watch WidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71C0FFEE00000000000A000E /* Debug */,
+				71C0FFEE00000000000A000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		71861B9C2E5E2EEA00F5F133 /* Build configuration list for PBXProject "ReportsApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

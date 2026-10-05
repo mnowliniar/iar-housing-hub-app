@@ -4,6 +4,7 @@ import Charts
 struct WatchHomeView: View {
     @State private var showSettings = false
     @StateObject private var vm = MonthlyVM()
+    @AppStorage("selectedGeoLabel") private var geoLabel: String = "Indiana"
 
     var body: some View {
         NavigationStack {
@@ -14,9 +15,10 @@ struct WatchHomeView: View {
                     // Small header above the cards
                     if !vm.month.isEmpty {
                         HStack(spacing: 8) {
-                            Text(vm.month)
+                            Text("\(geoLabel) · \(vm.month)")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
+                                .lineLimit(1)
                             Spacer(minLength: 4)
                             Button {
                                 showSettings = true
@@ -30,6 +32,8 @@ struct WatchHomeView: View {
                     }
 
                     List {
+                        // Where you're standing, first: the doorstep numbers.
+                        WatchHereCard()
                         // One full-screen card per indicator; crown flips between rows (carousel)
                         ForEach(Array(vm.facts.enumerated()), id: \.offset) { _, f in
                             VStack(alignment: .leading, spacing: 6) {

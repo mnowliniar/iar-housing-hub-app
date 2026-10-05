@@ -11,10 +11,14 @@ enum NotificationScheduler {
             switch settings.authorizationStatus {
             case .notDetermined:
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                    if granted { schedule() }
+                    if granted {
+                        schedule()
+                        PushRegistration.registerIfAuthorized()
+                    }
                 }
             case .authorized, .provisional, .ephemeral:
                 schedule()
+                PushRegistration.registerIfAuthorized()
             default:
                 break
             }

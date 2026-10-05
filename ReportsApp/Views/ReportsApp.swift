@@ -17,7 +17,25 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        PushRegistration.registerIfAuthorized()
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        PushRegistration.didRegister(deviceToken: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        debugLog("[Push] registration failed:", error)
+    }
+
+    /// A notification that lands while the app is open still shows.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 
     func userNotificationCenter(
@@ -25,11 +43,21 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let destination = response.notification.request.content.userInfo["destination"] as? String
-        if destination == "digest" {
-            DispatchQueue.main.async {
+        let info = response.notification.request.content.userInfo
+        let destination = info["destination"] as? String
+        DispatchQueue.main.async {
+            switch destination {
+            case "digest":
                 self.appState?.showDigest = true
                 self.appState?.selectedTab = 1
+            case "insight":
+                // The Thursday tap: this week's top insight for the member's market.
+                let geo = (info["geo_id"] as? Int).map(String.init) ?? (info["geo_id"] as? String) ?? "18"
+                if let url = URL(string: "iarhousinghub://market/\(geo)/insights") {
+                    self.appState?.handleDeepLink(url)
+                }
+            default:
+                break
             }
         }
         completionHandler()

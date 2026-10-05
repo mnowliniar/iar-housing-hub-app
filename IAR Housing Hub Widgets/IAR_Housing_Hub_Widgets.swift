@@ -19,21 +19,6 @@ struct HousingHubInsightEntry: TimelineEntry {
     let payload: InsightWidgetPayload?
 }
 
-struct WidgetTile: Decodable {
-    let geoName: String
-    let vizTitle: String
-    let vizTimespan: String?
-    let vizFormat: String?
-    let reportDate: String?
-    let latestValue: Double?
-    let latestDisplay: String?
-    let fact1Label: String?
-    let fact1Display: String?
-    let fact3Label: String?
-    let fact3Display: String?
-    let points: [Double]
-}
-
 struct HousingHubProvider: AppIntentTimelineProvider {
     typealias Intent = HousingHubWidgetIntent
 

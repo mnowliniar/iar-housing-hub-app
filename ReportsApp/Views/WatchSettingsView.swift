@@ -2,90 +2,106 @@
 //  WatchSettingsView.swift
 //  ReportsApp (watchOS)
 //
-//  Created by Matt Nowlin on 8/27/25.
+//  The watch's market picker. One field, which on the wrist means
+//  dictation: say "Hamilton" and pick from what the Hub finds. Before you
+//  say anything, your markets from the phone. The pick is stored as a
+//  number, which is what the data model reads.
 //
+
 import SwiftUI
 
-// Minimal models to mirror your existing selector flow
-struct GeoType: Identifiable, Hashable { let id: String; let name: String }
-struct GeoItem: Identifiable, Hashable { let id: String; let name: String }
-
-@MainActor
-final class GeoSelectorVM: ObservableObject {
-    @Published var types: [GeoType] = []
-    @Published var geos: [GeoItem] = []
-    @Published var selectedTypeID: String = "" {
-        didSet { Task { await loadGeos(for: selectedTypeID) } }
-    }
-    @Published var isLoading = false
-
-    // Persist the last used type for convenience
-    @AppStorage("selectedGeoType") private var storedTypeID: String = ""
-
-    func load() async {
-        guard !isLoading else { return }
-        isLoading = true; defer { isLoading = false }
-        do {
-            // Assumes you have these APIs from the iOS selector
-            let fetchedTypes = try await APIService.fetchGeoTypes() // [String] or [ (id:String, name:String) ]
-            // If fetchGeoTypes() returns [String], use the string for both id and name
-            self.types = fetchedTypes.map { GeoType(id: $0, name: $0) }
-
-            // Prefer stored type; else first
-            if let first = types.first?.id {
-                let initial = storedTypeID.isEmpty ? first : storedTypeID
-                selectedTypeID = initial
-            }
-        } catch {
-            // Fallback: at least offer State as a type
-            self.types = [GeoType(id: "state", name: "State")]
-            selectedTypeID = "state"
-        }
-    }
-
-    func loadGeos(for typeID: String) async {
-        guard !typeID.isEmpty else { return }
-        isLoading = true; defer { isLoading = false }
-        let fetched = await APIService.fetchGeos(ofType: typeID) // [ (id:String, name:String) ]
-        self.geos = fetched.map { GeoItem(id: String($0.id), name: $0.name) }
-        storedTypeID = typeID
-    }
-}
-
 struct WatchSettingsView: View {
-    // Persist the chosen geo id so MonthlyVM picks it up
-    @AppStorage("selectedGeo") private var geoID: String = "18"
-    @StateObject private var vm = GeoSelectorVM()
+    @AppStorage("selectedGeo") private var geoID: Int = 18
+    @AppStorage("selectedGeoLabel") private var geoLabel: String = "Indiana"
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var query = ""
+    @State private var results: [Place] = []
+    @State private var searching = false
+    @State private var searchTask: Task<Void, Never>?
+    @State private var top: PlacesTop?
+
+    private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         List {
-            // Type picker
-            if !vm.types.isEmpty {
-                Picker("Type", selection: $vm.selectedTypeID) {
-                    ForEach(vm.types) { t in
-                        Text(t.name).tag(t.id)
+            Section {
+                TextField("Say a county, ZIP or town", text: $query)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+            }
+            if !trimmed.isEmpty {
+                Section("Matches") {
+                    if trimmed.count < 2 {
+                        Text("Keep going…").foregroundStyle(.secondary)
+                    } else if searching && results.isEmpty {
+                        ProgressView()
+                    } else if results.isEmpty {
+                        Text("Nothing matches “\(trimmed)”.").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(results.prefix(12)) { place in row(place) }
                     }
                 }
-            }
-
-            // Geo picker (populated after type loads)
-            if vm.geos.isEmpty {
-                HStack { ProgressView(); Text("Loading areas…").font(.caption2).foregroundColor(.secondary) }
             } else {
-                Picker("Area", selection: $geoID) {
-                    ForEach(vm.geos) { g in
-                        Text(g.name).tag(g.id)
+                Section("Suggested") {
+                    if let top {
+                        let mine = top.mine
+                        if let d = mine?.dashboard { row(d) }
+                        ForEach((mine?.favorites ?? []).filter { $0.id != mine?.dashboard?.id }) { row($0) }
+                        if let s = mine?.statewide { row(s) }
+                        ForEach(mine?.recents ?? []) { row($0) }
+                    } else {
+                        ProgressView()
                     }
                 }
             }
         }
-        .navigationTitle("Settings")
-        .task { await vm.load() }
-        .onChange(of: vm.selectedTypeID) { _ in /* handled in didSet */ }
-        .onChange(of: vm.geos) { geos in
-            if !geos.contains(where: { $0.id == geoID }), let first = geos.first?.id {
-                geoID = first
+        .navigationTitle("Market")
+        .task {
+            for await loaded in PlacesService.top() {
+                top = loaded
             }
+        }
+        .onChange(of: query) { _, newValue in
+            schedule(newValue)
+        }
+    }
+
+    private func row(_ place: Place) -> some View {
+        Button {
+            geoID = place.id
+            geoLabel = place.label
+            dismiss()
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(place.label).font(.body.weight(.semibold)).lineLimit(1)
+                    if place.id == geoID {
+                        Spacer()
+                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                    }
+                }
+                Text(place.sub ?? place.type).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+    }
+
+    private func schedule(_ text: String) {
+        searchTask?.cancel()
+        let q = text.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else {
+            results = []
+            searching = false
+            return
+        }
+        searching = true
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if Task.isCancelled { return }
+            let found = await PlacesService.search(q)
+            if Task.isCancelled { return }
+            results = found
+            searching = false
         }
     }
 }

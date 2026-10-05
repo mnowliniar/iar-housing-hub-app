@@ -62,6 +62,7 @@ final class AuthManager: ObservableObject {
                 UserDefaults.standard.set(chatUserID, forKey: "chat_user_id")
             }
             self.state = .signedIn
+            PushRegistration.registerIfAuthorized()
             onSignedIn?()
             Task { await verifySession() }
         } catch {
@@ -165,6 +166,7 @@ final class AuthManager: ObservableObject {
             }
             needsFreshSignIn = false
             self.state = .signedIn
+            PushRegistration.registerIfAuthorized()
             onSignedIn?()
         } catch {
             debugLog("[Auth] exchange decode error:", error)
@@ -174,6 +176,9 @@ final class AuthManager: ObservableObject {
     }
 
     func logout() {
+        if let request = PushRegistration.unregisterRequest() {
+            Task { _ = try? await URLSession.shared.data(for: request) }
+        }
         clearSession()
         state = .signedOut
     }

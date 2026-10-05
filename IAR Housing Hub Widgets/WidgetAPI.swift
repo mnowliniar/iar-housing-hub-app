@@ -8,6 +8,22 @@
 
 import Foundation
 
+/// One indicator for one place, as the widgets and the complication draw it.
+struct WidgetTile: Decodable {
+    let geoName: String
+    let vizTitle: String
+    let vizTimespan: String?
+    let vizFormat: String?
+    let reportDate: String?
+    let latestValue: Double?
+    let latestDisplay: String?
+    let fact1Label: String?
+    let fact1Display: String?
+    let fact3Label: String?
+    let fact3Display: String?
+    let points: [Double]
+}
+
 enum WidgetAPI {
     // Change these defaults as needed
     static let proptype = "all"
