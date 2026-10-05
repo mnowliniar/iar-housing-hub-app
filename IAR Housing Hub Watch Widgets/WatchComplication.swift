@@ -44,6 +44,24 @@ struct WatchTileProvider: AppIntentTimelineProvider {
         return Timeline(entries: [WatchTileEntry(date: .now, tile: tile)], policy: .after(next))
     }
 
+    /// The watch face can't configure a widget the way the phone can; it
+    /// offers this list instead. Indiana with the four numbers people watch.
+    func recommendations() -> [AppIntentRecommendation<HousingHubWidgetIntent>] {
+        let indicators: [(id: String, title: String, subtitle: String)] = [
+            ("10", "Median Sale Price", "Median monthly sale price"),
+            ("6", "Inventory", "Average daily inventory"),
+            ("9", "Median Days on Market", "Days from listing to pending"),
+            ("3", "Closed Sales", "Weekly total of closed sales"),
+        ]
+        return indicators.map { item in
+            let intent = HousingHubWidgetIntent()
+            intent.geoType = .state
+            intent.geo = GeoEntity(id: "18", name: "Indiana", type: "State")
+            intent.indicator = IndicatorEntity(id: item.id, title: item.title, subtitle: item.subtitle)
+            return AppIntentRecommendation(intent: intent, description: "Indiana · \(item.title)")
+        }
+    }
+
     /// Thursday mornings: the weekly numbers land overnight, so the Smart
     /// Stack can bring the complication up when it is new.
     func relevances() async -> WidgetRelevance<HousingHubWidgetIntent> {
