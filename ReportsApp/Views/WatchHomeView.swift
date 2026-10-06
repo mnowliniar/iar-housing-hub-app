@@ -12,33 +12,21 @@ struct WatchHomeView: View {
                 if vm.isLoading || (vm.month.isEmpty && vm.facts.isEmpty && vm.pointsByLabel.isEmpty) {
                     VStack { ProgressView(); Text("Loading…").font(.caption2).foregroundColor(.secondary) }
                 } else {
-                    // Small header above the cards
-                    if !vm.month.isEmpty {
-                        HStack(spacing: 8) {
-                            Text("\(geoLabel) · \(vm.month)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                            Spacer(minLength: 4)
-                            Button {
-                                showSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 2)
-                    }
-
                     List {
                         // Where you're standing, first: the doorstep numbers.
                         WatchHereCard()
                         // One full-screen card per indicator; crown flips between rows (carousel)
                         ForEach(Array(vm.facts.enumerated()), id: \.offset) { _, f in
                             VStack(alignment: .leading, spacing: 6) {
-                                // Put the sparkline only on the Closed Sales card
-
+                                // The market and week ride on each card, so the
+                                // doorstep card above gets the whole first screen.
+                                if !vm.month.isEmpty {
+                                    Text("\(geoLabel) · \(vm.month)")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                                 Text(f.label)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -69,6 +57,15 @@ struct WatchHomeView: View {
                         }
                     }
                     .listStyle(.carousel)          // Digital Crown pages through cards
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
                 }
             }
         }

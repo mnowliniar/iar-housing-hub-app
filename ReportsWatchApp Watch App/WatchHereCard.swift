@@ -166,18 +166,18 @@ struct WatchHereCard: View {
     @StateObject private var finder = WatchHereFinder()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             if let zip = finder.zip, finder.authorized {
+                // One line for where you are, so three numbers and their
+                // year-over-year changes fit on the first screen.
                 HStack(spacing: 4) {
                     Image(systemName: "location.fill").font(.caption2)
-                    Text("You're in \(zip)").font(.caption).bold()
+                    Text(finder.placeName.map { "\(zip) · \($0)" } ?? "You're in \(zip)")
+                        .font(.caption).bold().lineLimit(1)
                     Spacer(minLength: 0)
                     if finder.looking { ProgressView().controlSize(.mini) }
                 }
                 .foregroundStyle(.tint)
-                if let name = finder.placeName {
-                    Text(name).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
                 if finder.noMarket {
                     Text("The Hub has no market for this ZIP.").font(.caption2).foregroundStyle(.secondary)
                 } else if finder.failed {
