@@ -20,12 +20,20 @@ struct HereNumber: Identifiable {
 
 /// Three numbers for one place, from the same endpoint as the dashboard.
 enum WatchNumbers {
-    /// Median sale price (10), median days on market (9), homes for sale (6).
+    /// Median sale price (10), median days on market (9), homes for sale (6);
+    /// when a ZIP has no monthly numbers, the weekly sale price (4), homes
+    /// for sale (6) and closed sales (3).
     static func fetch(geoID: Int) async -> [HereNumber] {
+        let monthly = await fetch(geoID: geoID, vizIDs: "10,9,6")
+        if !monthly.isEmpty { return monthly }
+        return await fetch(geoID: geoID, vizIDs: "4,6,3")
+    }
+
+    private static func fetch(geoID: Int, vizIDs: String) async -> [HereNumber] {
         var parts = URLComponents(string: "https://\(AppIdentity.hubHost)/api/viz_set/proptype/all")
         parts?.queryItems = [
             URLQueryItem(name: "geo_ids", value: String(geoID)),
-            URLQueryItem(name: "viz_ids", value: "10,9,6"),
+            URLQueryItem(name: "viz_ids", value: vizIDs),
             URLQueryItem(name: "facts", value: "fact1,fact2,fact3"),
             URLQueryItem(name: "fmt", value: "nested"),
             URLQueryItem(name: "compose", value: "0"),
@@ -59,8 +67,10 @@ enum WatchNumbers {
     private static func shortTitle(_ title: String, id: Int) -> String {
         switch id {
         case 10: return "Median price"
+        case 4: return "Sale price, wk"
         case 9: return "Days on market"
         case 6: return "Homes for sale"
+        case 3: return "Closed, wk"
         default: return title
         }
     }
@@ -75,6 +85,8 @@ final class WatchHereFinder: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var numbers: [HereNumber] = []
     @Published var looking = false
     @Published var noMarket = false
+    /// The ZIP is known but the Hub didn't answer with numbers.
+    @Published var failed = false
 
     private let manager = CLLocationManager()
 
@@ -137,7 +149,16 @@ final class WatchHereFinder: NSObject, ObservableObject, CLLocationManagerDelega
         }
         noMarket = false
         place = found
-        numbers = await WatchNumbers.fetch(geoID: found.id)
+        await loadNumbers()
+    }
+
+    func loadNumbers() async {
+        guard let place else { return }
+        failed = false
+        looking = true
+        defer { looking = false }
+        numbers = await WatchNumbers.fetch(geoID: place.id)
+        failed = numbers.isEmpty
     }
 }
 
@@ -159,6 +180,14 @@ struct WatchHereCard: View {
                 }
                 if finder.noMarket {
                     Text("The Hub has no market for this ZIP.").font(.caption2).foregroundStyle(.secondary)
+                } else if finder.failed {
+                    Button {
+                        Task { await finder.loadNumbers() }
+                    } label: {
+                        Label("No answer from the Hub. Try again", systemImage: "arrow.clockwise")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.bordered)
                 } else if finder.numbers.isEmpty {
                     Text("Getting the numbers…").font(.caption2).foregroundStyle(.secondary)
                 } else {
