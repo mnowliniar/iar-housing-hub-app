@@ -212,34 +212,26 @@ struct PackSlideView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
+    /// The card carries the number and its sparkline already; the slide
+    /// adds the talking point beside it.
     private func cardSlide(asset: PackAsset, stat: PackStat?) -> some View {
-        HStack(alignment: .center, spacing: 90) {
-            cardImage(asset, side: 820)
-            VStack(alignment: .leading, spacing: 26) {
-                eyebrow(stat?.window ?? deck.monthLabel)
+        HStack(alignment: .center, spacing: 100) {
+            cardImage(asset, side: 840)
+            VStack(alignment: .leading, spacing: 30) {
+                eyebrow(deck.geoLabel + (deck.monthLabel.isEmpty ? "" : " · \(deck.monthLabel)"))
                 Text(stat?.title ?? asset.title)
-                    .font(.system(size: 66, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(.system(size: 72, weight: .bold))
                     .lineLimit(2)
-                if let value = stat?.displayValue, !value.isEmpty {
-                    Text(value)
-                        .font(.system(size: 210, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.4)
-                        .padding(.top, -10)
-                }
-                if let label = stat?.valueLabel, !label.isEmpty {
-                    Text(label)
-                        .font(.system(size: 52, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
                 if let caption = asset.caption, !caption.isEmpty {
                     Text(caption)
-                        .font(.system(size: 38))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineSpacing(8)
-                        .lineLimit(6)
-                        .padding(.top, 12)
+                        .font(.system(size: 46))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineSpacing(12)
+                        .lineLimit(8)
+                } else if let value = stat?.displayValue, !value.isEmpty {
+                    Text([value, stat?.valueLabel ?? ""].filter { !$0.isEmpty }.joined(separator: " "))
+                        .font(.system(size: 54, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.88))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
