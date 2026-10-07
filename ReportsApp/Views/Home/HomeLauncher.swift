@@ -209,7 +209,7 @@ struct HomeLauncherView: View {
                     .environmentObject(app)
             } label: {
                 LauncherRow(icon: "rectangle.split.2x1", tint: .blue, title: "Compare two markets",
-                            subtitle: "Same indicators, same weeks, side by side")
+                            subtitle: "Per 1,000 households, so any two places compare")
             }
             .buttonStyle(.plain)
             NavigationLink {

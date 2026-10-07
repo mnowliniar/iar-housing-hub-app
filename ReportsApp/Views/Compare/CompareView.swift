@@ -21,6 +21,8 @@ struct CompareView: View {
     @State private var rightTiles: [Tile] = []
     @State private var picking: CompareSide?
     @State private var showVizPicker = false
+    /// The compare page's own metric set, apart from the dashboard's.
+    @AppStorage("compareVizIDs") private var storedVizIDs: String = ""
 
     static let leftColor = BrandColors.teal
     static let rightColor = BrandColors.magenta
@@ -30,9 +32,15 @@ struct CompareView: View {
         _rightID = State(initialValue: rightID)
     }
 
+    /// The comparison report's monthly vizzes: counts per 1,000 households
+    /// (closed sales, homes for sale, new listings, pendings), so a county
+    /// and a ZIP compare on the same footing, then days on market, median
+    /// price and the sale-to-list ratio.
+    static let defaultVizIDs = [38, 36, 37, 39, 40, 41, 42]
+
     private var vizIDs: [Int] {
-        let ids = app.userPrefs.app.dashboardVizIDs
-        return ids.isEmpty ? [9, 3, 7] : ids
+        let ids = storedVizIDs.split(separator: ",").compactMap { Int($0) }
+        return ids.isEmpty ? Self.defaultVizIDs : ids
     }
 
     var body: some View {
@@ -71,7 +79,7 @@ struct CompareView: View {
         .sheet(isPresented: $showVizPicker) {
             VizPickerView(selected: Binding(
                 get: { vizIDs },
-                set: { app.userPrefs.app.dashboardVizIDs = $0; app.saveUserPrefs() }
+                set: { storedVizIDs = $0.map(String.init).joined(separator: ",") }
             ))
         }
         // Either side or the metric set changing reloads both; a side that
@@ -237,7 +245,7 @@ struct CompareRow: View {
                 RoundedRectangle(cornerRadius: 8).fill(HubStyle.chip).frame(height: 110)
             } else if !points.isEmpty {
                 Chart(points) { p in
-                    LineMark(x: .value("Week", p.x), y: .value("Value", p.value))
+                    LineMark(x: .value("Period", p.x), y: .value("Value", p.value))
                         .foregroundStyle(by: .value("Market", p.series))
                         .interpolationMethod(.monotone)
                         .lineStyle(StrokeStyle(lineWidth: 2))
