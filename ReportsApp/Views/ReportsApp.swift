@@ -21,6 +21,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         return true
     }
 
+    /// A second screen (AirPlay, a cable) arrives as its own scene. It gets
+    /// the delegate that puts the presentation there; the app's own window
+    /// keeps SwiftUI's handling.
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            config.delegateClass = ExternalSceneDelegate.self
+        }
+        return config
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         PushRegistration.didRegister(deviceToken: deviceToken)
     }

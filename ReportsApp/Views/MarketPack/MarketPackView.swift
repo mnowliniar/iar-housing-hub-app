@@ -18,6 +18,7 @@ struct MarketPackView: View {
     @State private var showOptions = false
     @State private var addingMarket = false
     @State private var scriptExpanded = false
+    @State private var presenting = false
 
     var body: some View {
         ScrollView {
@@ -30,6 +31,7 @@ struct MarketPackView: View {
                 } else if let issue = model.issue {
                     header(issue)
                     pager
+                    present(issue)
                     script(issue)
                     downloadAll
                     subscription
@@ -45,12 +47,24 @@ struct MarketPackView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    startPresenting()
+                } label: {
+                    Image(systemName: "play.rectangle")
+                }
+                .disabled(model.issue == nil)
+                .accessibilityLabel("Present")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
                     showOptions = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .disabled(model.setup == nil)
             }
+        }
+        .fullScreenCover(isPresented: $presenting, onDismiss: { PackPresentation.shared.end() }) {
+            PackPresenterView()
         }
         .sheet(isPresented: $showOptions) {
             if let setup = model.setup {
@@ -231,6 +245,42 @@ struct MarketPackView: View {
                 .hubCard()
             }
         }
+    }
+
+    // MARK: Presenting
+
+    private func startPresenting() {
+        guard let issue = model.issue else { return }
+        PackPresentation.shared.start(PackDeck.make(issue: issue, assets: model.assets, label: model.currentLabel))
+        presenting = true
+    }
+
+    private func present(_ issue: PackIssue) -> some View {
+        Button {
+            startPresenting()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "play.rectangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(BrandColors.teal)
+                    .frame(width: 32, height: 32)
+                    .background(BrandColors.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Present it")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("On an Apple TV, a projector or this screen. The script stays with you.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .hubCard(padding: 12)
+        }
+        .buttonStyle(.plain)
     }
 
     private var downloadAll: some View {
