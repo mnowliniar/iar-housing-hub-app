@@ -2239,7 +2239,7 @@ private struct HTMLTextView: UIViewRepresentable {
     }
 }
 
-private struct AIChartSpec: Decodable {
+struct AIChartSpec: Decodable {
     let chartType: String?
     let labels: [String]?
     let title: String?
@@ -2255,7 +2255,7 @@ private struct AIChartSpec: Decodable {
     }
 }
 
-private struct AIChartDataset: Decodable {
+struct AIChartDataset: Decodable {
     let label: String?
     let data: [Double]?
     let borderWidth: Double?
@@ -2277,19 +2277,19 @@ private struct AIChartDataset: Decodable {
     }
 }
 
-private enum ChartKind: String {
+enum ChartKind: String {
     case line
     case bar
 }
 
-private struct NormalizedChartSpec {
+struct NormalizedChartSpec {
     let chartType: ChartKind
     let title: String?
     let subtitle: String?
     let series: [NormalizedSeries]
 }
 
-private struct NormalizedSeries: Identifiable {
+struct NormalizedSeries: Identifiable {
     let id = UUID()
     let label: String
     let points: [ChartPoint]
@@ -2300,7 +2300,7 @@ private struct NormalizedSeries: Identifiable {
     let fillColor: Color
 }
 
-private struct ChartPoint: Identifiable {
+struct ChartPoint: Identifiable {
     let id = UUID()
     let xLabel: String
     let yValue: Double
@@ -2339,7 +2339,7 @@ private extension Color {
     }
 }
 
-private enum ChartNormalizer {
+enum ChartNormalizer {
     static func build(from spec: AIChartSpec) -> NormalizedChartSpec {
         let labels = spec.labels ?? []
         let chartType = ChartKind(rawValue: spec.chartType ?? "") ?? .line
