@@ -225,8 +225,15 @@ struct CompareRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    if let subtitle = left?.subtitle ?? right?.subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
                 if let when = left?.latestReportDate ?? right?.latestReportDate {
                     Text(when)

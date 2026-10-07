@@ -69,6 +69,8 @@ struct Tile: Identifiable {
     let id = UUID()
     let vizID: Int
     let title: String
+    /// The viz's own subtitle ("per 1,000 households", the window).
+    var subtitle: String? = nil
     let subtitleLabel: String?   // fact2 label
     let latestValue: Double?     // numeric for chart & big number
     let latestDisplay: String?   // original formatted string for UI
@@ -132,6 +134,7 @@ final class DashboardService {
             return Tile(
                 vizID: v.viz_id,
                 title: v.viz_title,
+                subtitle: v.viz_subtitle,
                 subtitleLabel: f2?.label,
                 latestValue: f2?.value ?? f1?.value,
                 latestDisplay: f2?.raw ?? f1?.raw,
