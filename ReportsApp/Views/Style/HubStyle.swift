@@ -11,6 +11,9 @@
 import SwiftUI
 
 enum HubStyle {
+    /// The widest a page gets on an iPad before it is centered.
+    static let readableWidth: CGFloat = 820
+
     /// The page behind every screen. Adapts to dark mode.
     static let page = Color(.systemGroupedBackground)
     /// A card on the page.
@@ -28,6 +31,14 @@ extension View {
     /// The flat page background, in place of the teal-to-purple gradient.
     func hubPage() -> some View {
         background(HubStyle.page.ignoresSafeArea())
+    }
+
+    /// One readable column on a wide screen. The phone's pages are built for
+    /// a phone's width; on an iPad they sit centered at this width instead
+    /// of stretching across the window.
+    func hubReadable(_ width: CGFloat = HubStyle.readableWidth) -> some View {
+        frame(maxWidth: width)
+            .frame(maxWidth: .infinity)
     }
 
     /// A card: padding, white, a hairline, a soft shadow.

@@ -55,6 +55,7 @@ struct HomeView: View {
             }
             .padding(.vertical, 4)
             .padding(.bottom, 12)
+            .hubReadable()
             // A new stamp rebuilds the page: every section shows what it
             // has, then checks the Hub again.
             .id(app.reloadStamp)
@@ -617,7 +618,7 @@ extension View {
 }
 
 /// Account and app details. Sign out lives here now, off the Home page.
-private struct SettingsSheet: View {
+struct SettingsSheet: View {
     @EnvironmentObject var auth: AuthManager
     @Environment(\.dismiss) private var dismiss
 

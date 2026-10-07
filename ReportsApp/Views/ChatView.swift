@@ -14,6 +14,7 @@ import Charts
 struct ChatView: View {
     @StateObject private var chat = ChatManager()
     @EnvironmentObject var app: AppState
+    @Environment(\.horizontalSizeClass) private var hSize
     @FocusState private var inputFocused: Bool
     @State private var activeGutsContent: GutsModalContent?
     @State private var showingChatList = false
@@ -191,6 +192,7 @@ struct ChatView: View {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut("n", modifiers: .command)
                 .disabled(chat.messages.isEmpty && !chat.isSending)
             }
             .font(.body.weight(.medium))
@@ -326,8 +328,12 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
+        .hubReadable()
         .hubPage()
-        .toolbar(.hidden, for: .navigationBar)
+        // The phone has its own bar (the mark and the tools). The iPad keeps
+        // the system bar, which is where the sidebar button lives.
+        .toolbar(hSize == .compact ? .hidden : .visible, for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadWelcome() }
         .sheet(item: $activeGutsContent) { item in
             NavigationStack {

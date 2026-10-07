@@ -68,6 +68,7 @@ struct MarketView: View {
                 chatLaunchersSection
                     .padding(.bottom, 28)
             }
+            .hubReadable()
         }
         // Fill the screen whatever the content's height: attached to the
         // scroll view alone, the gradient only covered "Loading..." until
