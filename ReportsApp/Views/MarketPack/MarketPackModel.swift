@@ -27,6 +27,8 @@ struct PackAsset: Identifiable, Equatable {
     var title: String
     var caption: String?
     var statLine: String?
+    /// What to say while this card is on screen.
+    var talkingPoint: String?
 
     var isReel: Bool { kind == .reel }
     var aspect: CGFloat {
@@ -204,7 +206,8 @@ final class MarketPackModel: ObservableObject {
             out.append(PackAsset(
                 id: String(i), kind: .square(index: i, vizID: viz), key: sq.key, url: URL(string: sq.url),
                 ready: !pending.contains(String(i)), title: stat?.title ?? "Card \(i + 1)",
-                caption: issue.caption(forViz: viz), statLine: line))
+                caption: issue.caption(forViz: viz), statLine: line,
+                talkingPoint: issue.talkingPoint(forViz: viz)))
         }
         out.append(PackAsset(
             id: "reel", kind: .reel, key: data.video?.key ?? "",

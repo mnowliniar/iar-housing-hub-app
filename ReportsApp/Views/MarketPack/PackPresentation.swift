@@ -34,8 +34,9 @@ enum PackSlide: Identifiable {
         }
     }
 
+    /// The line to say with this slide: the talking point, else the caption.
     var caption: String? {
-        if case .card(let asset, _) = self { return asset.caption }
+        if case .card(let asset, _) = self { return asset.talkingPoint ?? asset.caption }
         return nil
     }
 }
@@ -213,25 +214,27 @@ struct PackSlideView: View {
     }
 
     /// The card carries the number and its sparkline already; the slide
-    /// adds the talking point beside it.
+    /// says what the number means, in one sentence the member can read
+    /// aloud.
     private func cardSlide(asset: PackAsset, stat: PackStat?) -> some View {
         HStack(alignment: .center, spacing: 100) {
             cardImage(asset, side: 840)
-            VStack(alignment: .leading, spacing: 30) {
-                eyebrow(deck.geoLabel + (deck.monthLabel.isEmpty ? "" : " · \(deck.monthLabel)"))
-                Text(stat?.title ?? asset.title)
-                    .font(.system(size: 72, weight: .bold))
-                    .lineLimit(2)
-                if let caption = asset.caption, !caption.isEmpty {
+            VStack(alignment: .leading, spacing: 34) {
+                eyebrow(stat?.title ?? asset.title)
+                if let point = asset.talkingPoint {
+                    Text(point)
+                        .font(.system(size: 72, weight: .bold))
+                        .lineSpacing(10)
+                        .lineLimit(5)
+                        .minimumScaleFactor(0.7)
+                } else if let caption = asset.caption, !caption.isEmpty {
                     Text(caption)
-                        .font(.system(size: 46))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineSpacing(12)
-                        .lineLimit(8)
+                        .font(.system(size: 52, weight: .semibold))
+                        .lineSpacing(10)
+                        .lineLimit(6)
                 } else if let value = stat?.displayValue, !value.isEmpty {
                     Text([value, stat?.valueLabel ?? ""].filter { !$0.isEmpty }.joined(separator: " "))
-                        .font(.system(size: 54, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.88))
+                        .font(.system(size: 72, weight: .bold))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

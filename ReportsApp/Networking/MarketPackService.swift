@@ -104,6 +104,8 @@ struct PackIssue: Decodable {
     let stats: [PackStat]?
     let script: String?
     let captions: [String: String?]?
+    /// One spoken sentence per indicator, for the presentation slides.
+    let talkingPoints: [String: String?]?
     let images: PackImages?
 
     enum CodingKeys: String, CodingKey {
@@ -111,10 +113,16 @@ struct PackIssue: Decodable {
         case geoID = "geo_id"
         case geoLabel = "geo_label"
         case monthLabel = "month_label"
+        case talkingPoints = "talking_points"
     }
 
     func caption(forViz vizID: Int) -> String? {
         guard let text = captions?[String(vizID)] ?? nil, !text.isEmpty else { return nil }
+        return text
+    }
+
+    func talkingPoint(forViz vizID: Int) -> String? {
+        guard let text = talkingPoints?[String(vizID)] ?? nil, !text.isEmpty else { return nil }
         return text
     }
 
