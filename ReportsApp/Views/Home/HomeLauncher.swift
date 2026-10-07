@@ -204,6 +204,15 @@ struct HomeLauncherView: View {
                 .buttonStyle(.plain)
             }
             NavigationLink {
+                CompareView(leftID: Int(app.userPrefs.app.dashboardGeoID ?? "") ?? 18,
+                            rightID: compareRight)
+                    .environmentObject(app)
+            } label: {
+                LauncherRow(icon: "rectangle.split.2x1", tint: .blue, title: "Compare two markets",
+                            subtitle: "Same indicators, same weeks, side by side")
+            }
+            .buttonStyle(.plain)
+            NavigationLink {
                 MarketMapView()
                     .environmentObject(app)
             } label: {
@@ -219,6 +228,12 @@ struct HomeLauncherView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// The first favorite that isn't the dashboard market, or the state.
+    private var compareRight: Int {
+        let left = Int(app.userPrefs.app.dashboardGeoID ?? "") ?? 18
+        return app.userPrefs.app.favoriteMarketIDs.first(where: { $0 != left }) ?? (left == 18 ? 18057 : 18)
     }
 
     // MARK: Spark

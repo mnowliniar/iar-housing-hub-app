@@ -68,6 +68,7 @@ enum PadDestination: Hashable {
     case digest
     case pack
     case map
+    case compare
     case market(Int)
 
     var tab: Int? {
@@ -142,6 +143,7 @@ struct PadShell: View {
                 Label("My Digest", systemImage: "envelope.open").tag(PadDestination.digest)
                 Label("Market Pack", systemImage: "shippingbox").tag(PadDestination.pack)
                 Label("Market Map", systemImage: "map").tag(PadDestination.map)
+                Label("Compare", systemImage: "rectangle.split.2x1").tag(PadDestination.compare)
             }
             if !favorites.isEmpty {
                 Section("Your markets") {
@@ -180,6 +182,8 @@ struct PadShell: View {
             NavigationStack { MarketPackView() }
         case .map:
             NavigationStack { MarketMapView() }
+        case .compare:
+            NavigationStack { CompareView(leftID: compareLeft, rightID: compareRight) }
         case .market(let geoID):
             NavigationStack { MarketView(geoID: geoID) }
                 .id(geoID)
@@ -197,6 +201,13 @@ struct PadShell: View {
         .opacity(0)
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
+    }
+
+    /// The dashboard market against the first favorite that isn't it, or
+    /// the state.
+    private var compareLeft: Int { Int(app.userPrefs.app.dashboardGeoID ?? "") ?? 18 }
+    private var compareRight: Int {
+        app.userPrefs.app.favoriteMarketIDs.first(where: { $0 != compareLeft }) ?? (compareLeft == 18 ? 18057 : 18)
     }
 
     private func loadFavorites() async {

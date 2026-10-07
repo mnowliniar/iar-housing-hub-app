@@ -132,8 +132,16 @@ struct MarketView: View {
             }
             
 
-            Button("Change market") {
-                showGeoPicker = true
+            HStack(spacing: 18) {
+                Button("Change market") {
+                    showGeoPicker = true
+                }
+                NavigationLink("Compare with…") {
+                    CompareView(leftID: currentGeoID,
+                                rightID: app.userPrefs.app.favoriteMarketIDs.first(where: { $0 != currentGeoID })
+                                    ?? (currentGeoID == 18 ? 18057 : 18))
+                        .environmentObject(app)
+                }
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(Color.accentColor)
