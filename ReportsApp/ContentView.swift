@@ -67,6 +67,7 @@ enum PadDestination: Hashable {
     case reports
     case digest
     case pack
+    case map
     case market(Int)
 
     var tab: Int? {
@@ -140,6 +141,7 @@ struct PadShell: View {
                 Label("Reports", systemImage: "doc.text").tag(PadDestination.reports)
                 Label("My Digest", systemImage: "envelope.open").tag(PadDestination.digest)
                 Label("Market Pack", systemImage: "shippingbox").tag(PadDestination.pack)
+                Label("Market Map", systemImage: "map").tag(PadDestination.map)
             }
             if !favorites.isEmpty {
                 Section("Your markets") {
@@ -176,6 +178,8 @@ struct PadShell: View {
             NavigationStack { DigestView() }
         case .pack:
             NavigationStack { MarketPackView() }
+        case .map:
+            NavigationStack { MarketMapView() }
         case .market(let geoID):
             NavigationStack { MarketView(geoID: geoID) }
                 .id(geoID)

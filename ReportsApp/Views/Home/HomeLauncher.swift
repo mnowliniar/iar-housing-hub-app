@@ -203,6 +203,14 @@ struct HomeLauncherView: View {
                 }
                 .buttonStyle(.plain)
             }
+            NavigationLink {
+                MarketMapView()
+                    .environmentObject(app)
+            } label: {
+                LauncherRow(icon: "map.fill", tint: .blue, title: "Market map",
+                            subtitle: "Every county, ZIP and township, colored by the numbers")
+            }
+            .buttonStyle(.plain)
             Button {
                 Task { await openOnWeb("/market/?tab=hood", key: "hood") }
             } label: {
