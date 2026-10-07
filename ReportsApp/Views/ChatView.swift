@@ -153,6 +153,22 @@ struct ChatView: View {
     }
 
     var body: some View {
+        HStack(spacing: 0) {
+            chatColumn
+                .hubReadable()
+            // The iPad has room for the pinboard beside the chat, as the
+            // web does at desktop widths: every chart an answer makes lands
+            // there as it is made.
+            if hSize == .regular {
+                Divider()
+                SparkPinboardColumn(chat: chat)
+                    .frame(width: 360)
+            }
+        }
+        .hubPage()
+    }
+
+    private var chatColumn: some View {
         VStack(spacing: 0) {
             // One bar: the mark, the chat's name once it has one, the tools.
             HStack(alignment: .center, spacing: 16) {
@@ -167,7 +183,7 @@ struct ChatView: View {
                 }
                 Spacer()
 
-                if !chat.messages.isEmpty {
+                if !chat.messages.isEmpty && hSize != .regular {
                     Button {
                         showingFiles = true
                     } label: {
@@ -328,8 +344,6 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        .hubReadable()
-        .hubPage()
         // The phone has its own bar (the mark and the tools). The iPad keeps
         // the system bar, which is where the sidebar button lives.
         .toolbar(hSize == .compact ? .hidden : .visible, for: .navigationBar)
@@ -924,12 +938,12 @@ private struct ChartCardView: View {
 
 // MARK: - Files, pinboard and PowerPoint
 
-private struct WebLinkItem: Identifiable {
+struct WebLinkItem: Identifiable {
     let id = UUID()
     let url: URL
 }
 
-private struct DeckFileItem: Identifiable {
+struct DeckFileItem: Identifiable {
     let id = UUID()
     let url: URL
 }
@@ -1219,7 +1233,7 @@ private struct SparkPinRow: View {
 /// web's download does (one chart per slide, its title, the member's
 /// attribution).
 @MainActor
-private enum SparkDeckExporter {
+enum SparkDeckExporter {
     struct DeckError: LocalizedError {
         let message: String
         var errorDescription: String? { message }
@@ -1277,7 +1291,7 @@ private enum SparkDeckExporter {
     }
 }
 
-private struct ChartActivityView: UIViewControllerRepresentable {
+struct ChartActivityView: UIViewControllerRepresentable {
     let activityItems: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
@@ -2358,7 +2372,7 @@ private enum ChartNormalizer {
     }
 }
 
-private struct SparkChartView: View {
+struct SparkChartView: View {
     let spec: NormalizedChartSpec
     var showsHeader: Bool = true
     var isExportStyle: Bool = false

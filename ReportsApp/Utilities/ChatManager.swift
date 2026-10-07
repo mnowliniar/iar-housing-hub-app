@@ -12,6 +12,9 @@ import SwiftUI
 @MainActor
 final class ChatManager: ObservableObject {
     @Published var messages: [ChatMessage] = []
+    /// Bumped when the pinboard changes (an answer pinned, a rename, a
+    /// delete), so a board on screen reloads.
+    @Published var pinsVersion = 0
     @Published var inputText: String = ""
     @Published var isSending = false
     @Published var conversationName: String?
@@ -594,9 +597,47 @@ final class ChatManager: ObservableObject {
             for pin in pending {
                 await Self.savePin(threadID: thread, type: pin.type, label: pin.label, content: pin.content)
             }
+            await MainActor.run { [weak self] in self?.pinsVersion += 1 }
         }
     }
     private var pinQueue: Task<Void, Never>?
+
+    /// A new title for a pin. A chart's title lives in its spec too, so the
+    /// chart on the board, the deck and the report all pick it up.
+    func renamePin(_ pin: SparkPin, to title: String) async -> Bool {
+        let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { return false }
+        var body: [String: Any] = ["thread_id": threadID, "pin_id": pin.id, "type": pin.type, "label": String(label.prefix(200))]
+        if let json = pin.chartSpecJSON, let data = json.data(using: .utf8),
+           var spec = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            spec["title"] = label
+            body["content"] = spec
+        }
+        let ok = await Self.postPins(path: "/save_pin/", body: body)
+        if ok { pinsVersion += 1 }
+        return ok
+    }
+
+    func deletePin(_ pin: SparkPin) async -> Bool {
+        let ok = await Self.postPins(path: "/delete_pin/", body: ["thread_id": threadID, "pin_id": pin.id])
+        if ok { pinsVersion += 1 }
+        return ok
+    }
+
+    private static func postPins(path: String, body: [String: Any]) async -> Bool {
+        var components = URLComponents(string: "\(serverBaseURL)\(path)")!
+        if let chatUserID = UserDefaults.standard.string(forKey: "chat_user_id"), !chatUserID.isEmpty {
+            components.queryItems = [URLQueryItem(name: "chat_user_id", value: chatUserID)]
+        }
+        guard let url = components.url, JSONSerialization.isValidJSONObject(body) else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let reply = try? await URLSession.shared.data(for: request.withAppIdentity()),
+              let http = reply.1 as? HTTPURLResponse else { return false }
+        return (200...299).contains(http.statusCode)
+    }
 
     private static func savePin(threadID: String, type: String, label: String, content: Any) async {
         var components = URLComponents(string: "\(serverBaseURL)/save_pin/")!
